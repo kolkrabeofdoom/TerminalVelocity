@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai;
 mod model;
 
 use eframe::egui::{self, Color32, FontId, Key, Modifiers, Rect, Sense, Stroke};
@@ -99,6 +100,7 @@ struct TerminalApp {
     storage: PathBuf,
     close_target: Option<u64>,
     restart_target: Option<u64>,
+    ai_draft: Option<ai::Draft>,
     applied_acrylic: bool,
     applied_opacity: Option<Option<u8>>,
 }
@@ -163,6 +165,7 @@ impl TerminalApp {
             storage,
             close_target: None,
             restart_target: None,
+            ai_draft: None,
             applied_acrylic: false,
             applied_opacity: None,
         };
@@ -189,6 +192,15 @@ impl TerminalApp {
     }
 
     fn start(&mut self, ctx: &egui::Context, pane: &Pane) {
+        self.start_with_command(ctx, pane, None);
+    }
+
+    fn start_with_command(
+        &mut self,
+        ctx: &egui::Context,
+        pane: &Pane,
+        command: Option<(PathBuf, Vec<String>)>,
+    ) {
         // Drop the old PTY before starting its replacement. Its delayed events
         // carry a different generation and cannot terminate or mutate the new session.
         self.sessions.remove(&pane.id);
@@ -198,17 +210,22 @@ impl TerminalApp {
             if !pane.directory.is_dir() {
                 return Err(format!("Startordner fehlt: {}", pane.directory.display()));
             }
-            let executable = pane.shell.resolve(Some(&self.workspace.shell_paths[pane.shell as usize]), self.storage.parent().unwrap_or(std::path::Path::new("."))).ok_or_else(|| {
+            let (executable, args) = if let Some(command) = command {
+                command
+            } else {
+                let executable = pane.shell.resolve(Some(&self.workspace.shell_paths[pane.shell as usize]), self.storage.parent().unwrap_or(std::path::Path::new("."))).ok_or_else(|| {
                 format!(
                     "{} wurde nicht gefunden. Unter Einstellungen → Shell-Programme einen Pfad angeben oder die portable Shell im Programmordner ablegen.",
                     pane.shell.label()
                 )
             })?;
-            let (executable, args) = pane.shell.launch(
-                executable,
-                self.storage.parent().unwrap_or(std::path::Path::new(".")),
-                false,
-            )?;
+                let (executable, args) = pane.shell.launch(
+                    executable,
+                    self.storage.parent().unwrap_or(std::path::Path::new(".")),
+                    false,
+                )?;
+                (executable, args)
+            };
             TerminalBackend::new(
                 generation,
                 ctx.clone(),
@@ -236,6 +253,51 @@ impl TerminalApp {
             },
         };
         self.sessions.insert(pane.id, session);
+    }
+
+    fn send_selection(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        if self.workspace.tabs.len() >= 32 || self.sessions.len() >= 64 {
+            return Err("Limit: 32 Tabs / 64 Bereiche erreicht.".into());
+        }
+        let draft = self.ai_draft.as_ref().ok_or("Keine Auswahl vorhanden")?;
+        let base = self.storage.parent().unwrap_or(std::path::Path::new("."));
+        let executable = draft
+            .provider
+            .resolve(
+                Some(&self.workspace.shell_paths[draft.provider as usize]),
+                base,
+            )
+            .ok_or_else(|| {
+                format!(
+                    "{} nicht gefunden. Bitte den Programmpfad in Einstellungen prüfen.",
+                    draft.provider.label()
+                )
+            })?;
+        let command = draft.command(executable)?;
+        let pane = Pane {
+            id: self.next_id,
+            shell: draft.provider,
+            directory: draft.directory.clone(),
+        };
+        self.next_id += 1;
+        self.start_with_command(ctx, &pane, Some(command));
+        if let Some(error) = self
+            .sessions
+            .get(&pane.id)
+            .and_then(|session| session.error.clone())
+        {
+            self.sessions.remove(&pane.id);
+            return Err(error);
+        }
+        self.focused = pane.id;
+        self.workspace.tabs.push(Tab {
+            name: format!("{} · Auswahl", pane.shell.label()),
+            root: Node::Pane(pane),
+        });
+        self.workspace.active_tab = self.workspace.tabs.len() - 1;
+        self.ai_draft = None;
+        self.status = "Auswahl an neue KI-Sitzung übergeben".into();
+        Ok(())
     }
 
     fn restart_pane(&mut self, id: u64, ctx: &egui::Context) {
@@ -396,6 +458,7 @@ fn draw_node(
     enabled: bool,
     close: &mut Option<u64>,
     retry: &mut Option<u64>,
+    ai_selection: &mut Option<ai::Draft>,
 ) {
     match node {
         Node::Split {
@@ -441,10 +504,28 @@ fn draw_node(
                 },
             );
             draw_node(
-                ui, a, first, sessions, focused, font_size, enabled, close, retry,
+                ui,
+                a,
+                first,
+                sessions,
+                focused,
+                font_size,
+                enabled,
+                close,
+                retry,
+                ai_selection,
             );
             draw_node(
-                ui, b, second, sessions, focused, font_size, enabled, close, retry,
+                ui,
+                b,
+                second,
+                sessions,
+                focused,
+                font_size,
+                enabled,
+                close,
+                retry,
+                ai_selection,
             );
         }
         Node::Pane(pane) => {
@@ -525,7 +606,19 @@ fn draw_node(
                             .set_font(TerminalFont::new(FontSettings {
                                 font_type: FontId::monospace(font_size),
                             }));
-                        ui.add(view);
+                        let response = ui.add(view);
+                        if enabled {
+                            response.context_menu(|ui| {
+                                let text = backend.selectable_content();
+                                let selected = !text.trim().is_empty();
+                                if ui.add_enabled(selected, egui::Button::new("Kopieren")).clicked() { ui.ctx().copy_text(text.clone()); ui.close_menu(); }
+                                if ui.add_enabled(selected, egui::Button::new("An KI übergeben …")).clicked() {
+                                    *ai_selection = Some(ai::Draft::new(text, pane.directory.clone(), pane.shell));
+                                    ui.close_menu();
+                                }
+                                if !selected { ui.weak("Zuerst Text im Terminal markieren."); }
+                            });
+                        }
                     }
                 }
             });
@@ -554,7 +647,11 @@ impl eframe::App for TerminalApp {
             shift: true,
             ..Modifiers::NONE
         };
-        if !self.settings && self.close_target.is_none() && self.restart_target.is_none() {
+        if !self.settings
+            && self.close_target.is_none()
+            && self.restart_target.is_none()
+            && self.ai_draft.is_none()
+        {
             if ctx.input_mut(|i| i.consume_key(shortcuts, Key::T)) {
                 self.add_tab(ctx);
             }
@@ -598,7 +695,7 @@ impl eframe::App for TerminalApp {
                 ui.horizontal_wrapped(|ui| {
                     ui.strong("RUST TERMINAL");
                     ui.label(
-                        egui::RichText::new("PROTOTYP 0.1.7 · SITZUNGSNEUSTART")
+                        egui::RichText::new("PROTOTYP 0.1.8 · TEXT AN KI")
                             .small()
                             .color(Color32::from_rgb(100, 210, 190)),
                     );
@@ -675,6 +772,7 @@ impl eframe::App for TerminalApp {
                 });
             });
         let mut retry_target = None;
+        let mut ai_selection = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(background).inner_margin(8.0))
             .show(ctx, |ui| {
@@ -682,7 +780,8 @@ impl eframe::App for TerminalApp {
                 if let Some(tab) = self.workspace.tabs.get_mut(self.workspace.active_tab) {
                     let enabled = !self.settings
                         && self.close_target.is_none()
-                        && self.restart_target.is_none();
+                        && self.restart_target.is_none()
+                        && self.ai_draft.is_none();
                     draw_node(
                         ui,
                         rect,
@@ -693,9 +792,51 @@ impl eframe::App for TerminalApp {
                         enabled,
                         &mut self.close_target,
                         &mut retry_target,
+                        &mut ai_selection,
                     );
                 }
             });
+        if let Some(mut draft) = ai_selection {
+            if self.workspace.default_shell.is_ai() {
+                draft.provider = self.workspace.default_shell;
+            }
+            self.ai_draft = Some(draft);
+        }
+        let mut submit = false;
+        let mut cancel = false;
+        let mut open = true;
+        if let Some(draft) = self.ai_draft.as_mut() {
+            egui::Window::new("Markierten Text an KI übergeben").open(&mut open).default_width(650.0).vscroll(true).show(ctx, |ui| {
+                ui.label("Prüfe und bearbeite den Text. Gesendet wird erst nach Klick auf „Senden“.");
+                ui.horizontal(|ui| {
+                    ui.label("Anbieter");
+                    egui::ComboBox::from_id_salt("ai-selection-provider").selected_text(draft.provider.label()).show_ui(ui, |ui| {
+                        for provider in ai::PROVIDERS { ui.selectable_value(&mut draft.provider, provider, provider.label()); }
+                    });
+                });
+                ui.label("Projektordner");
+                let mut path = draft.directory.display().to_string();
+                if ui.text_edit_singleline(&mut path).changed() { draft.directory = PathBuf::from(path); }
+                if draft.provider == Shell::OpenAI {
+                    ui.horizontal(|ui| { ui.label("Modell-ID"); ui.text_edit_singleline(&mut draft.model); });
+                    ui.small("Die OpenAI API benötigt einen eingerichteten API-Schlüssel. Die Antwort erscheint im neuen Tab.");
+                }
+                ui.add(egui::TextEdit::multiline(&mut draft.text).desired_rows(12).desired_width(f32::INFINITY).code_editor());
+                ui.small(format!("{} / {} Zeichen", draft.text.encode_utf16().count(), ai::MAX_PROMPT_UNITS));
+                ui.small("Der Text wird an den gewählten KI-Anbieter übergeben. Es öffnet sich eine neue Sitzung im angegebenen Projektordner.");
+                if let Some(error) = &draft.error { ui.colored_label(Color32::LIGHT_RED, error); }
+                ui.horizontal(|ui| { submit = ui.button("Senden und KI-Tab öffnen").clicked(); cancel = ui.button("Abbrechen").clicked(); });
+            });
+        }
+        if cancel || !open {
+            self.ai_draft = None;
+        } else if submit {
+            if let Err(error) = self.send_selection(ctx) {
+                if let Some(draft) = self.ai_draft.as_mut() {
+                    draft.error = Some(error);
+                }
+            }
+        }
         if let Some(id) = retry_target {
             if self
                 .sessions
@@ -1139,6 +1280,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             storage: base.join("unused-restart-test.json"),
             close_target: None,
             restart_target: None,
+            ai_draft: None,
             applied_acrylic: false,
             applied_opacity: None,
         };
@@ -1239,7 +1381,170 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
+    use std::time::{Duration, Instant};
+    fn wait_text(backend: &mut TerminalBackend, marker: &str) -> Result<(), String> {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < deadline {
+            let text: String = backend
+                .sync()
+                .grid
+                .display_iter()
+                .map(|cell| cell.c)
+                .collect();
+            if text.contains(marker) {
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        Err(format!(
+            "Testausgabe fehlt: {marker}; tatsächlich: {:?}",
+            backend
+                .sync()
+                .grid
+                .display_iter()
+                .map(|cell| cell.c)
+                .collect::<String>()
+        ))
+    }
+    let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
+    let root = std::env::temp_dir().join(format!("RustTerminal KI ü {}", std::process::id()));
+    std::fs::create_dir(&root)?;
+    let probe = root.join("prompt-probe.exe");
+    std::fs::copy(base.join("prompt-probe.exe"), &probe)?;
+    let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+        let executable = Shell::PowerShell
+            .resolve(None, &base)
+            .ok_or("PowerShell fehlt")?;
+        let (program, args) = Shell::PowerShell.launch(executable, &base, false)?;
+        let (sender, _receiver) = mpsc::channel();
+        let mut source = TerminalBackend::new(
+            1,
+            egui::Context::default(),
+            sender,
+            BackendSettings {
+                shell: program.display().to_string(),
+                args,
+                working_directory: Some(base.clone()),
+            },
+        )?;
+        source.process_command(egui_term::BackendCommand::Write(
+            b"Write-Output ('FIRST_' + 'LINE'); Write-Output ('SECOND_' + 'LINE')\r".to_vec(),
+        ));
+        wait_text(&mut source, "SECOND_LINE")?;
+        let content = source.sync();
+        let first = content
+            .grid
+            .display_iter()
+            .find(|cell| cell.c == 'F' && cell.point.column.0 == 0)
+            .ok_or("Erste Ausgabe fehlt")?
+            .point;
+        let second = content
+            .grid
+            .display_iter()
+            .find(|cell| cell.c == 'S' && cell.point.column.0 == 0)
+            .ok_or("Zweite Ausgabe fehlt")?
+            .point;
+        source.process_command(egui_term::BackendCommand::SelectStart(
+            egui_term::SelectionType::Simple,
+            0.0,
+            first.line.0 as f32,
+        ));
+        source.process_command(egui_term::BackendCommand::SelectUpdate(
+            11.0,
+            second.line.0 as f32,
+        ));
+        let selected = source.selectable_content();
+        if selected != "FIRST_LINE\nSECOND_LINE" {
+            return Err(format!("Mehrzeilige Auswahl falsch: {selected:?}").into());
+        }
+        drop(source);
+        let text = format!("{selected}\n--help\n'ü' & %PATH% $(whoami) ; \"text\" C:\\end\\");
+        if let Some(gemini) = Shell::Gemini.resolve(None, &base) {
+            let draft = ai::Draft::new(text.clone(), root.clone(), Shell::Gemini);
+            let (program, args) = draft.command(gemini)?;
+            use std::os::windows::process::CommandExt;
+            let prefix = &args[..args.len() - 1];
+            let output = std::process::Command::new(program)
+                .args(prefix)
+                .arg("--version")
+                .creation_flags(0x08000000)
+                .output()?;
+            if !output.status.success() {
+                return Err("Direkter Gemini-/Node-Start fehlgeschlagen".into());
+            }
+        }
+        for (provider, text) in ai::PROVIDERS.into_iter().flat_map(|provider| {
+            [
+                text.clone(),
+                "a\nb".into(),
+                "--help".into(),
+                "@private-file".into(),
+            ]
+            .into_iter()
+            .map(move |text| (provider, text))
+        }) {
+            let mut draft = ai::Draft::new(text.clone(), root.clone(), provider);
+            draft.model = "test-model".into();
+            let (program, args) = draft.command(probe.clone())?;
+            let expected: Vec<String> = args
+                .iter()
+                .map(|arg| {
+                    format!(
+                        "AI_ARG:{}",
+                        arg.as_bytes()
+                            .iter()
+                            .map(|byte| format!("{byte:02X}"))
+                            .collect::<String>()
+                    )
+                })
+                .collect();
+            let (sender, _receiver) = mpsc::channel();
+            let mut backend = TerminalBackend::new(
+                2,
+                egui::Context::default(),
+                sender,
+                BackendSettings {
+                    shell: program.display().to_string(),
+                    args,
+                    working_directory: Some(root.clone()),
+                },
+            )?;
+            for marker in expected {
+                wait_text(&mut backend, &marker)?;
+            }
+            wait_text(&mut backend, &format!("AI_CWD:{}", root.display()))?;
+        }
+        Ok(())
+    })();
+    let mut removed = std::fs::remove_file(&probe);
+    for _ in 0..30 {
+        if removed.is_ok() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        removed = std::fs::remove_file(&probe);
+    }
+    result?;
+    removed?;
+    std::fs::remove_dir(&root)?;
+    std::fs::write(base.join("handoff-test.txt"), "OK: echte mehrzeilige Terminalauswahl; alle vier Anbieter-Argumente über echte Windows-PTYs mit Testprogramm geprüft (Unicode, Anführungszeichen, Zeilenumbrüche, Shell-Sonderzeichen); richtiger Projektordner. Keine KI-Anfragen gesendet.")?;
+    Ok(())
+}
+
 fn main() -> eframe::Result {
+    if std::env::args().any(|arg| arg == "--handoff-test") {
+        if let Err(error) = handoff_test() {
+            let _ = std::fs::write(
+                std::env::current_exe()
+                    .unwrap_or_default()
+                    .with_file_name("handoff-test.txt"),
+                format!("FEHLER: {error}"),
+            );
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     if std::env::args().any(|arg| arg == "--restart-test") {
         if let Err(error) = restart_test() {
             let _ = std::fs::write(
@@ -1273,7 +1578,7 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     eframe::run_native(
-        "Rust Terminal · 0.1.7 · Sitzungsneustart",
+        "Rust Terminal · 0.1.8 · Text an KI",
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([1200.0, 760.0])
