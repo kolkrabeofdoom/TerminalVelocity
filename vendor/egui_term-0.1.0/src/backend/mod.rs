@@ -149,8 +149,13 @@ impl TerminalBackend {
         pty_event_proxy_sender: Sender<(u64, PtyEvent)>,
         settings: BackendSettings,
     ) -> Result<Self> {
+        #[cfg(windows)]
+        let program = format!("\"{}\"", settings.shell);
+        #[cfg(not(windows))]
+        let program = settings.shell;
         let pty_config = tty::Options {
-            shell: Some(tty::Shell::new(settings.shell, settings.args)),
+            shell: Some(tty::Shell::new(program, settings.args)),
+            escape_args: true,
             working_directory: settings.working_directory,
             ..tty::Options::default()
         };
@@ -241,16 +246,7 @@ impl TerminalBackend {
     }
 
     pub fn selectable_content(&self) -> String {
-        let content = self.last_content();
-        let mut result = String::new();
-        if let Some(range) = content.selectable_range {
-            for indexed in content.grid.display_iter() {
-                if range.contains(indexed.point) {
-                    result.push(indexed.c);
-                }
-            }
-        }
-        result
+        self.term.lock().selection_to_string().unwrap_or_default()
     }
 
     pub fn sync(&mut self) -> &RenderableContent {
