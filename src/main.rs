@@ -2,6 +2,7 @@
 
 mod ai;
 mod model;
+mod profiles;
 
 use eframe::egui::{self, Color32, FontId, Key, Modifiers, Rect, Sense, Stroke};
 use egui_term::{
@@ -101,6 +102,9 @@ struct TerminalApp {
     close_target: Option<u64>,
     restart_target: Option<u64>,
     ai_draft: Option<ai::Draft>,
+    profiles: profiles::Library,
+    profile_dialog: Option<profiles::Dialog>,
+    profiles_error: Option<String>,
     applied_acrylic: bool,
     applied_opacity: Option<Option<u8>>,
 }
@@ -142,6 +146,10 @@ impl TerminalApp {
             }
             Err(error) => (Workspace::default(), format!("Lesefehler: {error}")),
         };
+        let (profiles, profiles_error) = match profiles::Library::load(&storage.with_file_name("profiles.json")) {
+            Ok(profiles) => (profiles, None),
+            Err(error) => (profiles::Library::default(), Some(error)),
+        };
         let (sender, receiver) = mpsc::channel();
         let panes = workspace.panes();
         let next_id = panes.iter().map(|p| p.id).max().unwrap_or(0) + 1;
@@ -166,6 +174,9 @@ impl TerminalApp {
             close_target: None,
             restart_target: None,
             ai_draft: None,
+            profiles,
+            profile_dialog: None,
+            profiles_error,
             applied_acrylic: false,
             applied_opacity: None,
         };
@@ -419,6 +430,128 @@ impl TerminalApp {
         };
     }
 
+    fn show_profiles(&mut self, saving: bool) {
+        let directory = self.workspace.inherited_directory(self.focused, &PathBuf::from(&self.directory));
+        let first = self.profiles.profiles.first();
+        self.profile_dialog = Some(profiles::Dialog {
+            saving,
+            name: String::new(),
+            directory: if saving { directory.display().to_string() } else { first.map(|p| p.directory.display().to_string()).unwrap_or_default() },
+            selected: if saving || first.is_none() { None } else { Some(0) },
+            delete_target: None,
+            error: self.profiles_error.clone(),
+        });
+    }
+
+    fn open_profile(&mut self, index: usize, directory: PathBuf, ctx: &egui::Context) -> Result<(), String> {
+        let profile = self.profiles.profiles.get(index).ok_or("Projektprofil fehlt")?;
+        let name = profile.name.clone();
+        let (workspace, next_id) = profile.prepare(&directory, &self.workspace, self.next_id)?;
+        let panes: Vec<_> = workspace.panes().into_iter().filter(|p| p.id >= self.next_id).collect();
+        let base = self.storage.parent().unwrap_or(std::path::Path::new("."));
+        for pane in &panes {
+            if pane.shell.resolve(Some(&workspace.shell_paths[pane.shell as usize]), base).is_none() {
+                return Err(format!("{} nicht gefunden. Bitte zuerst den Programmpfad unter Einstellungen prüfen.", pane.shell.label()));
+            }
+        }
+        self.workspace = workspace;
+        self.next_id = next_id;
+        self.directory = directory.display().to_string();
+        for pane in panes { self.start(ctx, &pane); }
+        self.focus_first();
+        self.status = if self.sessions.values().any(|s| s.error.is_some()) {
+            format!("Projekt „{name}“ geöffnet. Startfehler im betroffenen Bereich prüfen.")
+        } else { format!("Projekt „{name}“ in neuen Tabs geöffnet") };
+        Ok(())
+    }
+
+    fn profile_window(&mut self, ctx: &egui::Context) {
+        let Some(mut dialog) = self.profile_dialog.take() else { return; };
+        let mut open = true;
+        let mut submit = false;
+        let mut cancel = false;
+        let mut delete = None;
+        let title = if dialog.saving { "Projektprofil speichern" } else { "Projekt öffnen" };
+        egui::Window::new(title).open(&mut open).default_width(620.0).vscroll(true).show(ctx, |ui| {
+            if dialog.saving {
+                ui.label("Der aktuelle Aufbau wird als Vorlage gespeichert: Tabs, Teilungen, Anbieter und Bereichsordner.");
+                ui.label("Projektname");
+                ui.text_edit_singleline(&mut dialog.name);
+                ui.label(format!("{} Tabs · {} Bereiche", self.workspace.tabs.len(), self.workspace.panes().len()));
+            } else {
+                ui.label("Das Projekt startet in neuen Tabs. Laufende Sitzungen bleiben erhalten.");
+                if self.profiles.profiles.is_empty() { ui.weak("Noch keine Profile. Richte deine Bereiche ein und wähle oben „Projekt speichern …“."); }
+                for (index, profile) in self.profiles.profiles.iter().enumerate() {
+                    if ui.selectable_label(dialog.selected == Some(index), &profile.name).clicked() {
+                        dialog.selected = Some(index);
+                        dialog.directory = profile.directory.display().to_string();
+                        dialog.delete_target = None;
+                        dialog.error = None;
+                    }
+                }
+            }
+            ui.separator();
+            ui.label("Projektordner (vollständiger Pfad)");
+            ui.text_edit_singleline(&mut dialog.directory);
+            ui.small("Bereichsordner innerhalb des gespeicherten Projektordners ziehen beim Öffnen mit um. Ordner außerhalb behalten ihren Pfad.");
+            if let Some(profile) = dialog.selected.and_then(|i| self.profiles.profiles.get(i)) {
+                ui.label(format!("{} Tabs · Standard: {}", profile.tabs.len(), profile.default_shell.label()));
+                let mut panes = vec![];
+                for tab in &profile.tabs { tab.root.panes(&mut panes); }
+                for pane in panes {
+                    let directory = pane.directory.strip_prefix(&profile.directory).map(|relative| PathBuf::from(&dialog.directory).join(relative)).unwrap_or(pane.directory);
+                    ui.small(format!("{} · {}", pane.shell.label(), directory.display()));
+                }
+                if ui.button("Profil löschen …").clicked() { dialog.delete_target = dialog.selected; }
+            }
+            if let Some(index) = dialog.delete_target {
+                ui.colored_label(Color32::YELLOW, "Dieses gespeicherte Profil löschen? Laufende Sitzungen bleiben erhalten.");
+                ui.horizontal(|ui| {
+                    if ui.button("Profil löschen bestätigen").clicked() { delete = Some(index); }
+                    if ui.button("Profil behalten").clicked() { dialog.delete_target = None; }
+                });
+            }
+            if let Some(error) = &dialog.error { ui.colored_label(Color32::LIGHT_RED, error); }
+            ui.small("Prozesse, Terminalausgaben und KI-Chat-Verläufe werden nicht gespeichert oder fortgesetzt.");
+            ui.horizontal(|ui| {
+                submit = ui.add_enabled(self.profiles_error.is_none() && (dialog.saving || dialog.selected.is_some()) && dialog.delete_target.is_none(), egui::Button::new(if dialog.saving { "Profil speichern" } else { "Projekt in neuen Tabs öffnen" })).clicked();
+                cancel = ui.button("Abbrechen").clicked();
+            });
+        });
+        if let Some(index) = delete {
+            let mut updated = self.profiles.clone();
+            updated.profiles.remove(index);
+            match updated.save(&self.storage.with_file_name("profiles.json")) {
+                Ok(()) => {
+                    self.profiles = updated;
+                    dialog.selected = None;
+                    dialog.delete_target = None;
+                    dialog.error = None;
+                    dialog.directory.clear();
+                    self.status = "Projektprofil gelöscht".into();
+                }
+                Err(error) => dialog.error = Some(error),
+            }
+        }
+        if submit {
+            let result = if dialog.saving {
+                (|| -> Result<(), String> {
+                    let directory = PathBuf::from(&dialog.directory);
+                    if !directory.is_dir() { return Err("Der Projektordner existiert nicht.".into()); }
+                    let profile = profiles::Profile::capture(&dialog.name, directory, &self.workspace)?;
+                    let mut updated = self.profiles.clone();
+                    updated.profiles.push(profile);
+                    updated.save(&self.storage.with_file_name("profiles.json"))?;
+                    self.profiles = updated;
+                    self.status = format!("Projektprofil „{}“ gespeichert", dialog.name.trim());
+                    Ok(())
+                })()
+            } else { self.open_profile(dialog.selected.unwrap(), PathBuf::from(&dialog.directory), ctx) };
+            match result { Ok(()) => return, Err(error) => dialog.error = Some(error) }
+        }
+        if open && !cancel { self.profile_dialog = Some(dialog); }
+    }
+
     fn close_pane(&mut self, id: u64, ctx: &egui::Context) {
         if let Some(index) = self.workspace.tabs.iter().position(|tab| {
             let mut panes = vec![];
@@ -658,6 +791,7 @@ impl eframe::App for TerminalApp {
             && self.close_target.is_none()
             && self.restart_target.is_none()
             && self.ai_draft.is_none()
+            && self.profile_dialog.is_none()
         {
             if ctx.input_mut(|i| i.consume_key(shortcuts, Key::T)) {
                 self.add_tab(ctx);
@@ -698,11 +832,12 @@ impl eframe::App for TerminalApp {
         egui::TopBottomPanel::top("toolbar")
             .frame(egui::Frame::NONE.fill(background).inner_margin(6.0))
             .show(ctx, |ui| {
+                if self.profile_dialog.is_some() { ui.disable(); }
                 ui.add_space(5.0);
                 ui.horizontal_wrapped(|ui| {
                     ui.strong("RUST TERMINAL");
                     ui.label(
-                        egui::RichText::new("PROTOTYP 0.1.9 · KI-SCHNELLAKTIONEN")
+                        egui::RichText::new("PROTOTYP 0.2.0 · PROJEKTPROFILE")
                             .small()
                             .color(Color32::from_rgb(100, 210, 190)),
                     );
@@ -749,6 +884,8 @@ impl eframe::App for TerminalApp {
                     if ui.button("Einstellungen").clicked() {
                         self.settings = !self.settings;
                     }
+                    if ui.add_enabled(!self.settings && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none(), egui::Button::new("Projekt öffnen")).clicked() { self.show_profiles(false); }
+                    if ui.add_enabled(!self.settings && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none(), egui::Button::new("Projekt speichern …")).clicked() { self.show_profiles(true); }
                 });
                 ui.horizontal_wrapped(|ui| {
                     let mut selected = None;
@@ -788,7 +925,8 @@ impl eframe::App for TerminalApp {
                     let enabled = !self.settings
                         && self.close_target.is_none()
                         && self.restart_target.is_none()
-                        && self.ai_draft.is_none();
+                        && self.ai_draft.is_none()
+                        && self.profile_dialog.is_none();
                     draw_node(
                         ui,
                         rect,
@@ -809,6 +947,7 @@ impl eframe::App for TerminalApp {
             }
             self.ai_draft = Some(draft);
         }
+        self.profile_window(ctx);
         let mut submit = false;
         let mut cancel = false;
         let mut open = true;
@@ -1288,6 +1427,9 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             close_target: None,
             restart_target: None,
             ai_draft: None,
+            profiles: profiles::Library::default(),
+            profile_dialog: None,
+            profiles_error: None,
             applied_acrylic: false,
             applied_opacity: None,
         };
@@ -1540,7 +1682,90 @@ fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
+    use std::time::{Duration, Instant};
+    fn wait_output(backend: &mut TerminalBackend, marker: &str) -> Result<(), String> {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            let text: String = backend.sync().grid.display_iter().map(|cell| cell.c).collect();
+            if text.contains(marker) { return Ok(()); }
+            if Instant::now() >= deadline { return Err(format!("Profil-PTY: {marker} fehlt: {text}")); }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+    }
+    let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
+    let root = std::env::temp_dir().join(format!("RustTerminal Profile ü {}", std::process::id()));
+    std::fs::create_dir(&root)?;
+    let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+        let old = root.join("original");
+        let new = root.join("relocated");
+        std::fs::create_dir_all(old.join("src"))?;
+        std::fs::create_dir_all(new.join("src"))?;
+        let workspace = Workspace {
+            tabs: vec![Tab { name: "Projekt".into(), root: Node::Split {
+                axis: Axis::Columns, ratio: 0.4,
+                first: Box::new(Node::Pane(Pane { id: 1, shell: Shell::Cmd, directory: old.clone() })),
+                second: Box::new(Node::Pane(Pane { id: 2, shell: Shell::Cmd, directory: old.join("src") })),
+            } }],
+            default_shell: Shell::Cmd,
+            ..Workspace::default()
+        };
+        let profile = profiles::Profile::capture("Testprojekt", old, &workspace)?;
+        let (sender, receiver) = mpsc::channel();
+        let mut app = TerminalApp {
+            workspace, sessions: HashMap::new(), sender, receiver, focused: 1,
+            next_id: 3, next_session_id: 1, settings: false,
+            directory: base.display().to_string(), status: String::new(),
+            storage: base.join("unused-profile-test.json"), close_target: None,
+            restart_target: None, ai_draft: None,
+            profiles: profiles::Library { version: 1, profiles: vec![profile] },
+            profile_dialog: None, profiles_error: None,
+            applied_acrylic: false, applied_opacity: None,
+        };
+        let ctx = egui::Context::default();
+        for pane in app.workspace.panes() { app.start(&ctx, &pane); }
+        let generations = [app.sessions[&1].generation, app.sessions[&2].generation];
+        app.sessions.get_mut(&1).unwrap().backend.as_mut().ok_or("Alte PTY fehlt")?.process_command(egui_term::BackendCommand::Write(b"set TV_PROFILE_STATE=OLD\r".to_vec()));
+        if app.open_profile(0, root.join("missing"), &ctx).is_ok() || app.sessions.len() != 2 || app.workspace.tabs.len() != 1 {
+            return Err("Fehlerhafter Profilstart hat den Arbeitsbereich verändert".into());
+        }
+        app.open_profile(0, new.clone(), &ctx)?;
+        if app.workspace.tabs.len() != 2 || app.sessions.len() != 4 || app.workspace.active_tab != 1
+            || app.sessions[&1].generation != generations[0] || app.sessions[&2].generation != generations[1] {
+            return Err("Profilstart hat laufende Sitzungen oder das Layout verändert".into());
+        }
+        for (id, directory) in [(3, new.clone()), (4, new.join("src"))] {
+            let backend = app.sessions.get_mut(&id).unwrap().backend.as_mut().ok_or("Neue PTY fehlt")?;
+            backend.process_command(egui_term::BackendCommand::Write(b"@echo off\rif defined TV_PROFILE_STATE (echo STALE_STATE) else (echo FRESH_STATE)\r".to_vec()));
+            backend.process_command(egui_term::BackendCommand::Write(b"echo PROFILE_CWD:%CD%\r".to_vec()));
+            wait_output(backend, "FRESH_STATE")?;
+            wait_output(backend, &format!("PROFILE_CWD:{}", directory.display()))?;
+        }
+        let original = app.sessions.get_mut(&1).unwrap().backend.as_mut().unwrap();
+        original.process_command(egui_term::BackendCommand::Write(b"@echo off\recho PRESERVED_STATE:%TV_PROFILE_STATE%\r".to_vec()));
+        wait_output(original, "PRESERVED_STATE:OLD")?;
+        drop(app);
+        Ok(())
+    })();
+    // All folders below this uniquely created test root are owned by this test.
+    if root.parent() != Some(std::env::temp_dir().as_path()) || !root.file_name().unwrap().to_string_lossy().starts_with("RustTerminal Profile ü ") {
+        return Err("Unerwarteter Testordner; Aufräumen abgebrochen".into());
+    }
+    let cleanup = std::fs::remove_dir_all(&root);
+    result?;
+    cleanup?;
+    std::fs::write(base.join("profile-test.txt"), "OK: Projektprofil mit Teilung in neuen Tabs geöffnet; alte PTY-Sitzungen erhalten; frische CMD-Prozesse und umgezogene Projekt-/Unterordner geprüft; fehlender Ordner ohne Änderung abgewiesen. Keine KI-Anfragen gesendet.")?;
+    Ok(())
+}
+
 fn main() -> eframe::Result {
+    if std::env::args().any(|arg| arg == "--profile-test") {
+        if let Err(error) = profile_test() {
+            let _ = std::fs::write(std::env::current_exe().unwrap_or_default().with_file_name("profile-test.txt"), format!("FEHLER: {error}"));
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     if std::env::args().any(|arg| arg == "--handoff-test") {
         if let Err(error) = handoff_test() {
             let _ = std::fs::write(
@@ -1586,7 +1811,7 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     eframe::run_native(
-        "Rust Terminal · 0.1.9 · KI-Schnellaktionen",
+        "Rust Terminal · 0.2.0 · Projektprofile",
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([1200.0, 760.0])
