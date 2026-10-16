@@ -1,6 +1,6 @@
 # Rust Terminal
 
-Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.1.9**.
+Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.2.0**.
 
 ## Funktionen
 
@@ -10,6 +10,7 @@ Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen f�
 - **Sitzung neu starten** direkt im Bereich: gleicher Anbieter und Projektordner, frischer Prozess und leere Ausgabe. Laufende Sitzungen erfordern vorher eine Bestätigung.
 - Markierten Text per Kontextmenü an eine KI übergeben: Anbieter, Projektordner und Text vor dem Senden bearbeiten; die KI öffnet in einem neuen Tab.
 - KI-Schnellaktionen im Kontextmenü: **Fehler erklären**, **Lösung vorschlagen**, **Befehl erklären** und **Ausgabe zusammenfassen** bereiten einen bearbeitbaren Entwurf vor.
+- Benannte Projektprofile speichern Tabs, Teilungen, Anbieter und Ordner als Vorlage und öffnen sie als neue Sitzungen in zusätzlichen Tabs.
 - Windows-Fenstertransparenz mit einstellbarer Deckkraft. Im standardmäßig aktiven Kompatibilitätsmodus werden auch Schrift und Bedienelemente durchsichtig. Alternativ Hintergrundtransparenz mit optionalem Acryl, abhängig vom Grafiktreiber.
 - Layout, Anbieter, zuletzt gemeldete Ordner und Darstellung werden lokal in `workspace.json` neben der EXE gespeichert.
 
@@ -34,7 +35,7 @@ PowerShell 7 muss im PATH, unter `C:\Program Files\PowerShell\7` oder portabel u
 ./scripts/package.ps1
 ```
 
-Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/RustTerminal-0.1.9-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
+Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/RustTerminal-0.2.0-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
 
 Dieses Repository enthält die Quellen und die angepasste Terminalbibliothek. Kompilate, heruntergeladene Laufzeiten, Zugangsdaten, lokale Einstellungen und Testausgaben sind ausgeschlossen.
 
@@ -68,6 +69,18 @@ Unterstützt werden Codex, Claude, Gemini und OpenAI API CLI. Letztere benötigt
 
 Die Übergabe erfolgt als Programmargumente, ohne den Text als Shell-Befehl auszuführen. npm-Starter werden dafür direkt über Node.js und ihren Programmeinstieg aufgerufen. Mehrzeilige Auswahlen behalten Zeilenumbrüche und berücksichtigen den Scrollback.
 
+## Projektprofile
+
+1. Projektordner, Anbieter, Tabs und Teilungen wie gewünscht einrichten.
+2. **Projekt speichern …** wählen, einen eindeutigen Namen und den vollständigen Projektordner eintragen, dann **Profil speichern** anklicken. Die Vorlage umfasst alle aktuell geöffneten Tabs und Bereiche sowie den Standardanbieter für neue Bereiche.
+3. Später **Projekt öffnen** wählen, das Profil auswählen und die Bereichsordner in der Vorschau prüfen.
+4. Bei Bedarf den Projektordner ändern. Bereiche innerhalb des ursprünglichen Projektordners ziehen einschließlich Unterordnern mit um; externe Ordner behalten ihren absoluten Pfad.
+5. **Projekt in neuen Tabs öffnen** startet neue Sitzungen. Bestehende Tabs und Prozesse bleiben erhalten. Fehlende Ordner oder Anbieterprogramme werden vor dem Öffnen gemeldet; es gelten insgesamt maximal 32 Tabs und 64 Bereiche.
+
+Unter **Projekt öffnen → Profil löschen …** kann eine Vorlage nach Bestätigung entfernt werden. Zum Speichern einer anderen Zusammenstellung einen neuen Namen verwenden oder die alte Vorlage vorher löschen. Maximal 32 Profile mit Namen von 1 bis 80 Zeichen sind möglich.
+
+Profile liegen lokal in `profiles.json` neben der EXE; fehlerhafte Dateien werden gemeldet und nicht automatisch überschrieben. Darstellungsoptionen und CLI-Programmpfade bleiben globale Einstellungen. Profile speichern ausschließlich die Startkonfiguration, keine Prozesse, Terminalausgaben, Anmeldedaten, KI-Entwürfe oder Chat-Verläufe. Die vorhandene `workspace.json` bleibt kompatibel und speichert weiterhin den zuletzt benutzten Arbeitsbereich. Beide lokalen Dateien sind vom Repository ausgeschlossen.
+
 ## Prüfung
 
 `cargo test --locked` prüft unter anderem Workspace-Kompatibilität, Ordnerübernahme bei Fokuswechsel, Teilungen, Anbieterpfade und den nativen Codex-Start. Die gebaute EXE bietet weitere lokale Tests:
@@ -76,6 +89,7 @@ Die Übergabe erfolgt als Programmargumente, ohne den Text als Shell-Befehl ausz
 ./dist/RustTerminal/RustTerminal.exe --smoke-test
 ./dist/RustTerminal/RustTerminal.exe --directory-test
 ./dist/RustTerminal/RustTerminal.exe --restart-test
+./dist/RustTerminal/RustTerminal.exe --profile-test
 ```
 
 Dabei werden Berichte neben der EXE erzeugt. Die Verzeichnis- und Neustarttests verwenden echte Windows-Pseudoterminals. Details und bekannte Grenzen stehen in [VERIFICATION.md](VERIFICATION.md).

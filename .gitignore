@@ -3,6 +3,8 @@
 /work/
 /workspace.json
 /workspace.json.tmp
+/profiles.json
+/profiles.json.tmp
 /*-test.txt
 /transparency-status.txt
 /shells/powershell/
