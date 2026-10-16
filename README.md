@@ -1,6 +1,6 @@
 # Rust Terminal
 
-Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.2.0**.
+Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.2.1**.
 
 ## Funktionen
 
@@ -11,6 +11,7 @@ Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen f�
 - Markierten Text per Kontextmenü an eine KI übergeben: Anbieter, Projektordner und Text vor dem Senden bearbeiten; die KI öffnet in einem neuen Tab.
 - KI-Schnellaktionen im Kontextmenü: **Fehler erklären**, **Lösung vorschlagen**, **Befehl erklären** und **Ausgabe zusammenfassen** bereiten einen bearbeitbaren Entwurf vor.
 - Benannte Projektprofile speichern Tabs, Teilungen, Anbieter und Ordner als Vorlage und öffnen sie als neue Sitzungen in zusätzlichen Tabs.
+- Wörtliche Suche im Terminalverlauf mit **Strg+F**, hervorgehobenen Treffern und Vor-/Rückwärtssuche.
 - Windows-Fenstertransparenz mit einstellbarer Deckkraft. Im standardmäßig aktiven Kompatibilitätsmodus werden auch Schrift und Bedienelemente durchsichtig. Alternativ Hintergrundtransparenz mit optionalem Acryl, abhängig vom Grafiktreiber.
 - Layout, Anbieter, zuletzt gemeldete Ordner und Darstellung werden lokal in `workspace.json` neben der EXE gespeichert.
 
@@ -35,7 +36,7 @@ PowerShell 7 muss im PATH, unter `C:\Program Files\PowerShell\7` oder portabel u
 ./scripts/package.ps1
 ```
 
-Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/RustTerminal-0.2.0-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
+Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/RustTerminal-0.2.1-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
 
 Dieses Repository enthält die Quellen und die angepasste Terminalbibliothek. Kompilate, heruntergeladene Laufzeiten, Zugangsdaten, lokale Einstellungen und Testausgaben sind ausgeschlossen.
 
@@ -51,6 +52,7 @@ Dieses Repository enthält die Quellen und die angepasste Terminalbibliothek. Ko
 | Bereich schließen | Strg+Umschalt+W |
 | Workspace speichern | Strg+Umschalt+S |
 | Kopieren / Einfügen | Strg+Umschalt+C / V |
+| Verlauf durchsuchen | Strg+F |
 
 Für einen KI-Tab zuerst im aktiven Terminal mit `cd` zum Projekt wechseln, oben den Anbieter auswählen und **+ Tab** anklicken. Die Bereichsüberschrift zeigt den zuletzt gemeldeten Ordner. Bei KI-Sitzungen ohne Shell-Prompt bleibt der geerbte Startordner maßgeblich.
 
@@ -81,6 +83,14 @@ Unter **Projekt öffnen → Profil löschen …** kann eine Vorlage nach Bestät
 
 Profile liegen lokal in `profiles.json` neben der EXE; fehlerhafte Dateien werden gemeldet und nicht automatisch überschrieben. Darstellungsoptionen und CLI-Programmpfade bleiben globale Einstellungen. Profile speichern ausschließlich die Startkonfiguration, keine Prozesse, Terminalausgaben, Anmeldedaten, KI-Entwürfe oder Chat-Verläufe. Die vorhandene `workspace.json` bleibt kompatibel und speichert weiterhin den zuletzt benutzten Arbeitsbereich. Beide lokalen Dateien sind vom Repository ausgeschlossen.
 
+## Suche im Terminalverlauf
+
+Den gewünschten Bereich aktivieren und **Strg+F** oder **Suchen** wählen. Die Suche beachtet Groß- und Kleinschreibung und behandelt Sonderzeichen als normalen Text. Sie durchsucht den noch gespeicherten Verlauf dieses Bereichs, einschließlich weich umgebrochener Zeilen. Treffer erscheinen gelb, der aktuelle Treffer orange.
+
+**Enter** / **Weiter** springt zum nächsten Treffer, **Umschalt+Enter** / **Zurück** zum vorherigen. Nach dem letzten Treffer geht es wieder zum ersten. Ältere Treffer werden in den sichtbaren Bereich gescrollt. **Escape** oder **Schließen (Esc)** entfernt die Hervorhebung und gibt den Fokus ans Terminal zurück; die erreichte Scrollposition bleibt erhalten. Danach lässt sich Text wie gewohnt markieren und über das KI-Kontextmenü untersuchen.
+
+Neue Ausgabe wird während der Suche regelmäßig berücksichtigt. Beim Wechsel des Bereichs oder Öffnen eines Dialogs wird die Suche geschlossen. Suchtexte werden nicht gespeichert oder an die Shell bzw. KI gesendet. Maximal 256 Zeichen Suchtext und die ersten 10.000 Treffer werden unterstützt; ein `+` im Zähler weist auf weitere Treffer hin. Bereits aus dem begrenzten Terminalverlauf entfernte Ausgaben können nicht gefunden werden.
+
 ## Prüfung
 
 `cargo test --locked` prüft unter anderem Workspace-Kompatibilität, Ordnerübernahme bei Fokuswechsel, Teilungen, Anbieterpfade und den nativen Codex-Start. Die gebaute EXE bietet weitere lokale Tests:
@@ -90,6 +100,7 @@ Profile liegen lokal in `profiles.json` neben der EXE; fehlerhafte Dateien werde
 ./dist/RustTerminal/RustTerminal.exe --directory-test
 ./dist/RustTerminal/RustTerminal.exe --restart-test
 ./dist/RustTerminal/RustTerminal.exe --profile-test
+./dist/RustTerminal/RustTerminal.exe --search-test
 ```
 
 Dabei werden Berichte neben der EXE erzeugt. Die Verzeichnis- und Neustarttests verwenden echte Windows-Pseudoterminals. Details und bekannte Grenzen stehen in [VERIFICATION.md](VERIFICATION.md).
