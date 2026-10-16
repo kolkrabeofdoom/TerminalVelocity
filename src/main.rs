@@ -22,6 +22,13 @@ struct Session {
     exited: bool,
 }
 
+struct HistorySearch {
+    pane_id: u64,
+    query: String,
+    focus_input: bool,
+    error: Option<String>,
+}
+
 fn handle_session_event(
     workspace: &mut Workspace,
     sessions: &mut HashMap<u64, Session>,
@@ -105,6 +112,7 @@ struct TerminalApp {
     profiles: profiles::Library,
     profile_dialog: Option<profiles::Dialog>,
     profiles_error: Option<String>,
+    search: Option<HistorySearch>,
     applied_acrylic: bool,
     applied_opacity: Option<Option<u8>>,
 }
@@ -177,6 +185,7 @@ impl TerminalApp {
             profiles,
             profile_dialog: None,
             profiles_error,
+            search: None,
             applied_acrylic: false,
             applied_opacity: None,
         };
@@ -441,6 +450,55 @@ impl TerminalApp {
             delete_target: None,
             error: self.profiles_error.clone(),
         });
+    }
+
+    fn close_search(&mut self) {
+        if let Some(search) = self.search.take() {
+            if let Some(backend) = self.sessions.get_mut(&search.pane_id).and_then(|s| s.backend.as_mut()) {
+                let _ = backend.set_search("");
+            }
+        }
+    }
+
+    fn show_search(&mut self) {
+        if let Some(search) = &mut self.search {
+            search.focus_input = true;
+        } else if self.sessions.get(&self.focused).is_some_and(|s| s.backend.is_some()) {
+            self.search = Some(HistorySearch { pane_id: self.focused, query: String::new(), focus_input: true, error: None });
+        } else { self.status = "In diesem Bereich ist kein Terminalverlauf verfügbar.".into(); }
+    }
+
+    fn search_bar(&mut self, ctx: &egui::Context, background: Color32) {
+        if self.search.as_ref().is_some_and(|s| s.pane_id != self.focused)
+            || self.settings || self.profile_dialog.is_some() || self.ai_draft.is_some()
+            || self.restart_target.is_some() || self.close_target.is_some() {
+            self.close_search();
+        }
+        let Some(search) = &mut self.search else { return; };
+        let Some(backend) = self.sessions.get_mut(&search.pane_id).and_then(|s| s.backend.as_mut()) else {
+            self.search = None;
+            return;
+        };
+        let mut close = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+        let mut previous = ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Enter));
+        let mut next = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter));
+        egui::TopBottomPanel::bottom("history_search").frame(egui::Frame::NONE.fill(background).inner_margin(6.0)).show(ctx, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Verlauf durchsuchen");
+                let response = ui.add(egui::TextEdit::singleline(&mut search.query).id_salt("history-query").desired_width(280.0).hint_text("Suchtext (Groß-/Kleinschreibung beachten)"));
+                if search.focus_input { response.request_focus(); search.focus_input = false; }
+                if response.changed() { search.error = backend.set_search(&search.query).err(); }
+                let (active, count, truncated) = backend.search_status();
+                ui.label(if search.query.is_empty() { "Suchtext eingeben".into() } else if count == 0 { "Keine Treffer".into() } else { format!("{active} / {count}{}", if truncated { "+" } else { "" }) });
+                previous |= ui.add_enabled(count > 0, egui::Button::new("Zurück")).on_hover_text("Umschalt+Enter").clicked();
+                next |= ui.add_enabled(count > 0, egui::Button::new("Weiter")).on_hover_text("Enter").clicked();
+                close |= ui.button("Schließen (Esc)").clicked();
+                if let Some(error) = &search.error { ui.colored_label(Color32::LIGHT_RED, error); }
+            });
+        });
+        if previous || next { backend.next_search_match(previous); search.focus_input = true; }
+        ctx.request_repaint_after(std::time::Duration::from_millis(300));
+        if close { self.close_search(); }
     }
 
     fn open_profile(&mut self, index: usize, directory: PathBuf, ctx: &egui::Context) -> Result<(), String> {
@@ -787,11 +845,14 @@ impl eframe::App for TerminalApp {
             shift: true,
             ..Modifiers::NONE
         };
+        if !self.settings && self.profile_dialog.is_none() && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none()
+            && ctx.input_mut(|i| i.consume_key(Modifiers::CTRL, Key::F)) { self.show_search(); }
         if !self.settings
             && self.close_target.is_none()
             && self.restart_target.is_none()
             && self.ai_draft.is_none()
             && self.profile_dialog.is_none()
+            && self.search.is_none()
         {
             if ctx.input_mut(|i| i.consume_key(shortcuts, Key::T)) {
                 self.add_tab(ctx);
@@ -837,7 +898,7 @@ impl eframe::App for TerminalApp {
                 ui.horizontal_wrapped(|ui| {
                     ui.strong("RUST TERMINAL");
                     ui.label(
-                        egui::RichText::new("PROTOTYP 0.2.0 · PROJEKTPROFILE")
+                        egui::RichText::new("PROTOTYP 0.2.1 · VERLAUFSSUCHE")
                             .small()
                             .color(Color32::from_rgb(100, 210, 190)),
                     );
@@ -884,6 +945,7 @@ impl eframe::App for TerminalApp {
                     if ui.button("Einstellungen").clicked() {
                         self.settings = !self.settings;
                     }
+                    if ui.add_enabled(!self.settings && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none(), egui::Button::new("Suchen")).on_hover_text("Strg+F · Aktiven Terminalverlauf durchsuchen").clicked() { self.show_search(); }
                     if ui.add_enabled(!self.settings && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none(), egui::Button::new("Projekt öffnen")).clicked() { self.show_profiles(false); }
                     if ui.add_enabled(!self.settings && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none(), egui::Button::new("Projekt speichern …")).clicked() { self.show_profiles(true); }
                 });
@@ -916,6 +978,7 @@ impl eframe::App for TerminalApp {
                 });
             });
         let mut retry_target = None;
+        self.search_bar(ctx, background);
         let mut ai_selection = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(background).inner_margin(8.0))
@@ -926,7 +989,8 @@ impl eframe::App for TerminalApp {
                         && self.close_target.is_none()
                         && self.restart_target.is_none()
                         && self.ai_draft.is_none()
-                        && self.profile_dialog.is_none();
+                        && self.profile_dialog.is_none()
+                        && self.search.is_none();
                     draw_node(
                         ui,
                         rect,
@@ -1430,6 +1494,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             profiles: profiles::Library::default(),
             profile_dialog: None,
             profiles_error: None,
+            search: None,
             applied_acrylic: false,
             applied_opacity: None,
         };
@@ -1719,7 +1784,7 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
             storage: base.join("unused-profile-test.json"), close_target: None,
             restart_target: None, ai_draft: None,
             profiles: profiles::Library { version: 1, profiles: vec![profile] },
-            profile_dialog: None, profiles_error: None,
+            profile_dialog: None, profiles_error: None, search: None,
             applied_acrylic: false, applied_opacity: None,
         };
         let ctx = egui::Context::default();
@@ -1751,14 +1816,88 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
     if root.parent() != Some(std::env::temp_dir().as_path()) || !root.file_name().unwrap().to_string_lossy().starts_with("RustTerminal Profile ü ") {
         return Err("Unerwarteter Testordner; Aufräumen abgebrochen".into());
     }
-    let cleanup = std::fs::remove_dir_all(&root);
+    let mut cleanup = std::fs::remove_dir_all(&root);
+    for _ in 0..30 {
+        if cleanup.is_ok() || cleanup.as_ref().is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound) { cleanup = Ok(()); break; }
+        // PTY shutdown is asynchronous; allow Windows to release child working directories.
+        std::thread::sleep(Duration::from_millis(100));
+        cleanup = std::fs::remove_dir_all(&root);
+    }
     result?;
     cleanup?;
     std::fs::write(base.join("profile-test.txt"), "OK: Projektprofil mit Teilung in neuen Tabs geöffnet; alte PTY-Sitzungen erhalten; frische CMD-Prozesse und umgezogene Projekt-/Unterordner geprüft; fehlender Ordner ohne Änderung abgewiesen. Keine KI-Anfragen gesendet.")?;
     Ok(())
 }
 
+fn search_test() -> Result<(), Box<dyn std::error::Error>> {
+    use std::time::{Duration, Instant};
+    fn wait(backend: &mut TerminalBackend, marker: &str) -> Result<(), String> {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            let text: String = backend.sync().grid.display_iter().map(|cell| cell.c).collect();
+            if text.contains(marker) { return Ok(()); }
+            if Instant::now() >= deadline { return Err(format!("Suchtest: Ausgabe fehlt: {marker}")); }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+    }
+    let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
+    let (sender, _receiver) = mpsc::channel();
+    let executable = Shell::Cmd.resolve(None, &base).ok_or("CMD fehlt")?;
+    let (program, _) = Shell::Cmd.launch(executable, &base, false)?;
+    let commands = format!("(for /L %i in (1,1,140) do @echo TV_SEARCH_%i literal.[x] Grüße) & echo {}WRAP_NEEDLE & echo TV_SEARCH_DONE", "X".repeat(75));
+    let args = vec!["/D".into(), "/Q".into(), "/K".into(), commands];
+    let mut backend = TerminalBackend::new(1, egui::Context::default(), sender, BackendSettings {
+        shell: program.display().to_string(), args, working_directory: Some(base),
+    })?;
+    wait(&mut backend, "TV_SEARCH_DONE")?;
+    backend.set_search("literal.[x]")?;
+    let (start, count, _) = backend.search_status();
+    if count != 140 { return Err(format!("Wörtliche Suche: erwartet 140 Treffer, erhalten {count}").into()); }
+    backend.next_search_match(false);
+    if backend.search_status().0 != start % count + 1 { return Err("Vorwärtssuche fehlerhaft".into()); }
+    backend.next_search_match(true);
+    if backend.search_status().0 != start { return Err("Rückwärtssuche fehlerhaft".into()); }
+    for _ in 0..count { backend.next_search_match(false); }
+    if backend.search_status().0 != start { return Err("Umlauf der Suche fehlerhaft".into()); }
+    backend.set_search("TV_SEARCH_1 ")?;
+    backend.sync();
+    if backend.search_status().1 != 1 || backend.last_content().grid.display_offset() == 0 {
+        return Err("Treffer im zurückliegenden Verlauf nicht angesprungen".into());
+    }
+    if !backend.last_content().grid.display_iter().any(|cell| backend.search_highlight(cell.point) == Some(true)) {
+        return Err("Aktiver Treffer wird nicht hervorgehoben".into());
+    }
+    backend.set_search("WRAP_NEEDLE")?;
+    backend.sync();
+    let lines: std::collections::HashSet<_> = backend.last_content().grid.display_iter().filter(|cell| backend.search_highlight(cell.point).is_some()).map(|cell| cell.point.line.0).collect();
+    if backend.search_status().1 != 1 || lines.len() != 2 { return Err("Suche über weichen Zeilenumbruch fehlerhaft".into()); }
+    backend.set_search("Grüße")?;
+    if backend.search_status().1 != 140 { return Err("Unicode-Suche fehlerhaft".into()); }
+    backend.set_search("LITERAL.[x]")?;
+    if backend.search_status().1 != 0 { return Err("Groß-/Kleinschreibung wird nicht beachtet".into()); }
+    backend.set_search("TV_SEARCH_LIVE")?;
+    backend.process_command(egui_term::BackendCommand::Write(b"echo TV_SEARCH_LIVE\r".to_vec()));
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while backend.search_status().1 == 0 {
+        backend.sync();
+        if Instant::now() >= deadline { return Err("Neue Ausgabe wurde nicht in die Suche aufgenommen".into()); }
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    if backend.set_search(&"a".repeat(257)).is_ok() { return Err("Zu langer Suchtext akzeptiert".into()); }
+    backend.set_search("")?;
+    if backend.search_status() != (0, 0, false) { return Err("Suche nicht zurückgesetzt".into()); }
+    std::fs::write(std::env::current_exe()?.with_file_name("search-test.txt"), "OK: echte CMD-PTY; 140 wörtliche Treffer im Verlauf; Vor-/Rückwärtssuche und Umlauf; Scrollen zu älteren Treffern und Markierung; weiche Zeilenumbrüche; Unicode; Groß-/Kleinschreibung; neue Ausgabe; Eingabelimit und Leeren der Suche. Keine KI-Anfragen gesendet.")?;
+    Ok(())
+}
+
 fn main() -> eframe::Result {
+    if std::env::args().any(|arg| arg == "--search-test") {
+        if let Err(error) = search_test() {
+            let _ = std::fs::write(std::env::current_exe().unwrap_or_default().with_file_name("search-test.txt"), format!("FEHLER: {error}"));
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     if std::env::args().any(|arg| arg == "--profile-test") {
         if let Err(error) = profile_test() {
             let _ = std::fs::write(std::env::current_exe().unwrap_or_default().with_file_name("profile-test.txt"), format!("FEHLER: {error}"));
@@ -1811,7 +1950,7 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     eframe::run_native(
-        "Rust Terminal · 0.2.0 · Projektprofile",
+        "Rust Terminal · 0.2.1 · Verlaufssuche",
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([1200.0, 760.0])
