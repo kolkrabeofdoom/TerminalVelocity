@@ -140,6 +140,25 @@ pub struct TerminalBackend {
     size: TerminalSize,
     notifier: Notifier,
     last_content: RenderableContent,
+    search: Option<HistorySearch>,
+}
+
+struct HistorySearch {
+    regex: RegexSearch,
+    matches: Vec<Match>,
+    active: usize,
+    truncated: bool,
+    refreshed: std::time::Instant,
+}
+
+fn literal_pattern(query: &str) -> String {
+    // Explicit case sensitivity avoids RegexSearch's automatic smart-case behavior.
+    let mut pattern = String::from("(?-i)");
+    for c in query.chars() {
+        if "\\.^$|?*+()[]{}".contains(c) { pattern.push('\\'); }
+        pattern.push(c);
+    }
+    pattern
 }
 
 impl TerminalBackend {
@@ -198,6 +217,7 @@ impl TerminalBackend {
             size: terminal_size,
             notifier,
             last_content: initial_content,
+            search: None,
         })
     }
 
@@ -249,7 +269,65 @@ impl TerminalBackend {
         self.term.lock().selection_to_string().unwrap_or_default()
     }
 
+    /// Literal, case-sensitive search over the retained grid, including wrapped lines.
+    pub fn set_search(&mut self, query: &str) -> std::result::Result<(), String> {
+        self.search = None;
+        if query.is_empty() { return Ok(()); }
+        if query.chars().count() > 256 { return Err("Suchtext auf 256 Zeichen kürzen.".into()); }
+        let regex = RegexSearch::new(&literal_pattern(query)).map_err(|e| e.to_string())?;
+        self.search = Some(HistorySearch { regex, matches: vec![], active: 0, truncated: false, refreshed: std::time::Instant::now() });
+        self.refresh_search();
+        if let Some(search) = &mut self.search {
+            let term = self.term.lock();
+            let top = Line(-(term.grid().display_offset() as i32));
+            search.active = search.matches.iter().position(|m| m.start().line >= top).unwrap_or(search.matches.len().saturating_sub(1));
+        }
+        self.reveal_search();
+        Ok(())
+    }
+
+    pub fn refresh_search(&mut self) {
+        let Some(search) = &mut self.search else { return; };
+        let term = self.term.lock();
+        let start = Point::new(term.topmost_line(), Column(0));
+        let end = Point::new(term.bottommost_line(), term.last_column());
+        search.matches = RegexIter::new(start, end, Direction::Right, &*term, &mut search.regex).take(10_001).collect();
+        search.truncated = search.matches.len() > 10_000;
+        search.matches.truncate(10_000);
+        search.active = search.active.min(search.matches.len().saturating_sub(1));
+        search.refreshed = std::time::Instant::now();
+    }
+
+    fn reveal_search(&mut self) {
+        if let Some(range) = self.search.as_ref().and_then(|s| s.matches.get(s.active)).cloned() {
+            let mut term = self.term.lock();
+            term.scroll_to_point(*range.end());
+            term.scroll_to_point(*range.start());
+        }
+    }
+
+    pub fn next_search_match(&mut self, backwards: bool) {
+        self.refresh_search();
+        if let Some(search) = &mut self.search {
+            let len = search.matches.len();
+            if len > 0 { search.active = if backwards { (search.active + len - 1) % len } else { (search.active + 1) % len }; }
+        }
+        self.reveal_search();
+    }
+
+    pub fn search_status(&self) -> (usize, usize, bool) {
+        self.search.as_ref().map(|s| (if s.matches.is_empty() { 0 } else { s.active + 1 }, s.matches.len(), s.truncated)).unwrap_or((0, 0, false))
+    }
+
+    /// Binary search keeps rendering independent of the total number of matches.
+    pub fn search_highlight(&self, point: Point) -> Option<bool> {
+        let search = self.search.as_ref()?;
+        let index = search.matches.partition_point(|m| m.start() <= &point).checked_sub(1)?;
+        search.matches[index].contains(&point).then_some(index == search.active)
+    }
+
     pub fn sync(&mut self) -> &RenderableContent {
+        if self.search.as_ref().is_some_and(|s| s.refreshed.elapsed() >= std::time::Duration::from_millis(300)) { self.refresh_search(); }
         let term = self.term.clone();
         let mut terminal = term.lock();
         let selectable_range = match &terminal.selection {
