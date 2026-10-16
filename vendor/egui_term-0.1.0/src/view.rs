@@ -222,7 +222,8 @@ impl<'a> TerminalView<'a> {
         layout: &Response,
         painter: &Painter,
     ) {
-        let content = self.backend.sync();
+        self.backend.sync();
+        let content = self.backend.last_content();
         let layout_min = layout.rect.min;
         let layout_max = layout.rect.max;
         let cell_height = content.terminal_size.cell_height as f32;
@@ -278,6 +279,13 @@ impl<'a> TerminalView<'a> {
 
             if is_inverse || is_selected {
                 std::mem::swap(&mut fg, &mut bg);
+            }
+
+            if !is_selected {
+                if let Some(active) = self.backend.search_highlight(indexed.point) {
+                    bg = if active { Color32::from_rgb(245, 155, 45) } else { Color32::from_rgb(215, 200, 85) };
+                    fg = Color32::BLACK;
+                }
             }
 
             if global_bg != bg {
