@@ -1,6 +1,6 @@
 # Rust Terminal
 
-Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.1.8**.
+Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.1.9**.
 
 ## Funktionen
 
@@ -9,6 +9,7 @@ Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen f�
 - Neue Tabs und Teilungen übernehmen den aktuellen Projektordner des aktiven Bereichs. PowerShell, CMD und Git Bash melden Verzeichniswechsel an jedem Prompt.
 - **Sitzung neu starten** direkt im Bereich: gleicher Anbieter und Projektordner, frischer Prozess und leere Ausgabe. Laufende Sitzungen erfordern vorher eine Bestätigung.
 - Markierten Text per Kontextmenü an eine KI übergeben: Anbieter, Projektordner und Text vor dem Senden bearbeiten; die KI öffnet in einem neuen Tab.
+- KI-Schnellaktionen im Kontextmenü: **Fehler erklären**, **Lösung vorschlagen**, **Befehl erklären** und **Ausgabe zusammenfassen** bereiten einen bearbeitbaren Entwurf vor.
 - Windows-Fenstertransparenz mit einstellbarer Deckkraft. Im standardmäßig aktiven Kompatibilitätsmodus werden auch Schrift und Bedienelemente durchsichtig. Alternativ Hintergrundtransparenz mit optionalem Acryl, abhängig vom Grafiktreiber.
 - Layout, Anbieter, zuletzt gemeldete Ordner und Darstellung werden lokal in `workspace.json` neben der EXE gespeichert.
 
@@ -33,7 +34,7 @@ PowerShell 7 muss im PATH, unter `C:\Program Files\PowerShell\7` oder portabel u
 ./scripts/package.ps1
 ```
 
-Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/RustTerminal-0.1.8-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
+Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/RustTerminal-0.1.9-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
 
 Dieses Repository enthält die Quellen und die angepasste Terminalbibliothek. Kompilate, heruntergeladene Laufzeiten, Zugangsdaten, lokale Einstellungen und Testausgaben sind ausgeschlossen.
 
@@ -57,9 +58,11 @@ Für einen KI-Tab zuerst im aktiven Terminal mit `cd` zum Projekt wechseln, oben
 ## Markierten Text an eine KI übergeben
 
 1. Text im Terminal mit der Maus markieren. In Programmen mit eigener Maussteuerung dabei **Umschalt** gedrückt halten.
-2. Rechtsklick auf den Terminalbereich → **An KI übergeben …**.
+2. Rechtsklick auf den Terminalbereich → **An KI übergeben …** oder eine der vier Schnellaktionen auswählen.
 3. Anbieter und Projektordner prüfen; im Dialog eine Frage ergänzen oder den Text bearbeiten.
 4. **Senden und KI-Tab öffnen** anklicken.
+
+Die Schnellaktionen ergänzen eine passende deutsche Anweisung und übernehmen die Auswahl einschließlich Zeilenumbrüchen. Ohne Markierung sind die Aktionen deaktiviert. Der gesamte Entwurf bleibt vor dem Senden bearbeitbar; das Limit von 10.000 Windows-Zeicheneinheiten umfasst auch die ergänzte Anweisung. Die Prompts fordern ausschließlich eine Erklärung oder einen Vorschlag an, ohne Befehle auszuführen oder Dateien zu ändern. Das ist eine Anweisung an die Anbieter-CLI, keine technische Einschränkung ihrer Werkzeuge; deren Berechtigungen und Bestätigungen gelten weiterhin.
 
 Unterstützt werden Codex, Claude, Gemini und OpenAI API CLI. Letztere benötigt eine eigene Modell-ID und einen bereits eingerichteten API-Schlüssel. Der Dialog öffnet eine neue Sitzung; bestehende KI-Chats werden nicht beschrieben. **Abbrechen** schließt den Entwurf ohne Übergabe. Der Entwurf wird nicht in `workspace.json` gespeichert. Der Text ist auf 10.000 Windows-Zeicheneinheiten begrenzt, damit er in die Befehlszeile passt.
 
