@@ -1,6 +1,6 @@
 # Rust Terminal
 
-Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.1.7**.
+Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.1.8**.
 
 ## Funktionen
 
@@ -8,6 +8,7 @@ Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen f�
 - Codex CLI, Claude Code, Gemini CLI und OpenAI API CLI als eigene Terminalbereiche.
 - Neue Tabs und Teilungen übernehmen den aktuellen Projektordner des aktiven Bereichs. PowerShell, CMD und Git Bash melden Verzeichniswechsel an jedem Prompt.
 - **Sitzung neu starten** direkt im Bereich: gleicher Anbieter und Projektordner, frischer Prozess und leere Ausgabe. Laufende Sitzungen erfordern vorher eine Bestätigung.
+- Markierten Text per Kontextmenü an eine KI übergeben: Anbieter, Projektordner und Text vor dem Senden bearbeiten; die KI öffnet in einem neuen Tab.
 - Windows-Fenstertransparenz mit einstellbarer Deckkraft. Im standardmäßig aktiven Kompatibilitätsmodus werden auch Schrift und Bedienelemente durchsichtig. Alternativ Hintergrundtransparenz mit optionalem Acryl, abhängig vom Grafiktreiber.
 - Layout, Anbieter, zuletzt gemeldete Ordner und Darstellung werden lokal in `workspace.json` neben der EXE gespeichert.
 
@@ -32,7 +33,7 @@ PowerShell 7 muss im PATH, unter `C:\Program Files\PowerShell\7` oder portabel u
 ./scripts/package.ps1
 ```
 
-Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/RustTerminal-0.1.7-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
+Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/RustTerminal-0.1.8-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
 
 Dieses Repository enthält die Quellen und die angepasste Terminalbibliothek. Kompilate, heruntergeladene Laufzeiten, Zugangsdaten, lokale Einstellungen und Testausgaben sind ausgeschlossen.
 
@@ -53,6 +54,17 @@ Für einen KI-Tab zuerst im aktiven Terminal mit `cd` zum Projekt wechseln, oben
 
 **Sitzung neu starten** steht in jedem Bereichskopf. Andere Bereiche laufen weiter. Ein fehlender Projektordner wird als Startfehler angezeigt und nicht stillschweigend ersetzt.
 
+## Markierten Text an eine KI übergeben
+
+1. Text im Terminal mit der Maus markieren. In Programmen mit eigener Maussteuerung dabei **Umschalt** gedrückt halten.
+2. Rechtsklick auf den Terminalbereich → **An KI übergeben …**.
+3. Anbieter und Projektordner prüfen; im Dialog eine Frage ergänzen oder den Text bearbeiten.
+4. **Senden und KI-Tab öffnen** anklicken.
+
+Unterstützt werden Codex, Claude, Gemini und OpenAI API CLI. Letztere benötigt eine eigene Modell-ID und einen bereits eingerichteten API-Schlüssel. Der Dialog öffnet eine neue Sitzung; bestehende KI-Chats werden nicht beschrieben. **Abbrechen** schließt den Entwurf ohne Übergabe. Der Entwurf wird nicht in `workspace.json` gespeichert. Der Text ist auf 10.000 Windows-Zeicheneinheiten begrenzt, damit er in die Befehlszeile passt.
+
+Die Übergabe erfolgt als Programmargumente, ohne den Text als Shell-Befehl auszuführen. npm-Starter werden dafür direkt über Node.js und ihren Programmeinstieg aufgerufen. Mehrzeilige Auswahlen behalten Zeilenumbrüche und berücksichtigen den Scrollback.
+
 ## Prüfung
 
 `cargo test --locked` prüft unter anderem Workspace-Kompatibilität, Ordnerübernahme bei Fokuswechsel, Teilungen, Anbieterpfade und den nativen Codex-Start. Die gebaute EXE bietet weitere lokale Tests:
@@ -64,6 +76,8 @@ Für einen KI-Tab zuerst im aktiven Terminal mit `cd` zum Projekt wechseln, oben
 ```
 
 Dabei werden Berichte neben der EXE erzeugt. Die Verzeichnis- und Neustarttests verwenden echte Windows-Pseudoterminals. Details und bekannte Grenzen stehen in [VERIFICATION.md](VERIFICATION.md).
+
+Für den Offline-Übergabetest zunächst `cargo build --release --locked --features test-tools` ausführen. Die erzeugte `prompt-probe.exe` neben die Terminal-EXE kopieren und diese mit `--handoff-test` starten. Der Test verwendet echte PTYs und ein lokales Konsolen-Testprogramm; es werden keine KI-Anfragen gesendet.
 
 ## Technik und Lizenzen
 

@@ -2,7 +2,7 @@
 
 Stand: 16. Oktober 2026, Windows x64.
 
-- Sieben Rust-Regressionstests bestehen: Workspace-Kompatibilität, Anbieter- und Pfadauflösung, Layout-Roundtrip, doppelte IDs und bereichsbezogene Ordnerübernahme.
+- Neun Rust-Regressionstests bestehen: Workspace-Kompatibilität, Anbieter- und Pfadauflösung, Layout-Roundtrip, doppelte IDs, bereichsbezogene Ordnerübernahme und Prüfung der KI-Übergabeargumente.
 - Release-Build mit GNU-Rust-Toolchain erfolgreich.
 - PowerShell und CMD: Eingabe und Ausgabe über echte Pseudoterminals geprüft.
 - Ordnerwechsel und Start eines neuen Bereichs im übernommenen Ordner geprüft, einschließlich Leerzeichen, Apostroph, Unicode sowie kurzen und langen Windows-Pfadnamen.
@@ -12,8 +12,10 @@ Stand: 16. Oktober 2026, Windows x64.
 - Codex, Claude, Gemini und OpenAI CLI wurden in der lokalen Installation gestartet. Die Anbieterprogramme und deren Anmeldungen sind nicht Bestandteil des Repositorys.
 - Windows-Kompatibilitätstransparenz wird über die Windows-API gesetzt und rückgelesen. Der Benutzer hat die sichtbare Funktion bestätigt.
 - Der Benutzer hat die Ordnerübernahme im Terminal bestätigt.
+- Version 0.1.8: Mehrzeilige Terminalauswahl über eine echte PowerShell-PTY geprüft. Alle vier Anbieterprofile wurden mit einem lokalen Konsolen-Testprogramm auf unveränderte Argumente und den richtigen Projektordner geprüft, einschließlich Umlauten, Zeilenumbrüchen, Anführungszeichen, Shell-Sonderzeichen, führenden Optionszeichen und Dateiverweiszeichen. Der direkte Gemini-/Node-Start wurde zusätzlich mit `--version` geprüft. Dabei wurden keine KI-Anfragen gesendet.
+- Nach der Argumentmaskierung bestehen erneut die Shell-, Ordner- und Neustarttests mit echten PTYs.
 
-Nicht praktisch geprüft: Git Bash (lokal nicht installiert), alle Grafikkarten und Windows-Versionen, umfassende Kompatibilität mit interaktiven Terminalprogrammen sowie der grafische Klickpfad der neu hinzugefügten Neustart-Schaltfläche. Die Neustartlogik wurde über echte PTYs geprüft.
+Nicht praktisch geprüft: Git Bash (lokal nicht installiert), alle Grafikkarten und Windows-Versionen, umfassende Kompatibilität mit interaktiven Terminalprogrammen sowie die grafischen Klickpfade von Neustart und KI-Kontextmenü. Die Übergabe wurde offline mit einem Testprogramm geprüft; tatsächliche Modellantworten und Anbieteranmeldungen bleiben dem interaktiven Betrieb vorbehalten.
 
 Das portable Paketskript prüft die SHA256-Summe der festgeschriebenen PowerShell-ZIP vor dem Entpacken. Anbieter-CLIs benötigen eigene Installation und Anmeldung. Die Arbeitsbereichsdatei speichert keine laufenden Prozesse, Terminalausgaben oder KI-Chat-Verläufe.
 
