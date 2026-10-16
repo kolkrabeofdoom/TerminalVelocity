@@ -613,8 +613,15 @@ fn draw_node(
                                 let selected = !text.trim().is_empty();
                                 if ui.add_enabled(selected, egui::Button::new("Kopieren")).clicked() { ui.ctx().copy_text(text.clone()); ui.close_menu(); }
                                 if ui.add_enabled(selected, egui::Button::new("An KI übergeben …")).clicked() {
-                                    *ai_selection = Some(ai::Draft::new(text, pane.directory.clone(), pane.shell));
+                                    *ai_selection = Some(ai::Draft::new(text.clone(), pane.directory.clone(), pane.shell));
                                     ui.close_menu();
+                                }
+                                ui.separator();
+                                for action in ai::QuickAction::ALL {
+                                    if ui.add_enabled(selected, egui::Button::new(action.label())).clicked() {
+                                        *ai_selection = Some(ai::Draft::new(action.prompt(&text), pane.directory.clone(), pane.shell));
+                                        ui.close_menu();
+                                    }
                                 }
                                 if !selected { ui.weak("Zuerst Text im Terminal markieren."); }
                             });
@@ -695,7 +702,7 @@ impl eframe::App for TerminalApp {
                 ui.horizontal_wrapped(|ui| {
                     ui.strong("RUST TERMINAL");
                     ui.label(
-                        egui::RichText::new("PROTOTYP 0.1.8 · TEXT AN KI")
+                        egui::RichText::new("PROTOTYP 0.1.9 · KI-SCHNELLAKTIONEN")
                             .small()
                             .color(Color32::from_rgb(100, 210, 190)),
                     );
@@ -1482,6 +1489,7 @@ fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
                 "@private-file".into(),
             ]
             .into_iter()
+            .chain(ai::QuickAction::ALL.into_iter().map(|action| action.prompt(&text)))
             .map(move |text| (provider, text))
         }) {
             let mut draft = ai::Draft::new(text.clone(), root.clone(), provider);
@@ -1578,7 +1586,7 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     eframe::run_native(
-        "Rust Terminal · 0.1.8 · Text an KI",
+        "Rust Terminal · 0.1.9 · KI-Schnellaktionen",
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([1200.0, 760.0])
