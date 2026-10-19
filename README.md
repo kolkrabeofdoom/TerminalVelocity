@@ -138,6 +138,8 @@ Neue Ausgabe wird während der Suche regelmäßig berücksichtigt. Beim Wechsel 
 
 ## Prüfung
 
+GitHub Actions führt bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf Windows-Prüfungen aus. Der Workflow verwendet Windows Server 2022 und Rust 1.89.0: Formatierung, sämtliche Haupttests einschließlich Offline-Remote-Prüfungen, Release-Build sowie die PTY-Prüfungen für Ordnerübernahme, Neustart, Profile und Suche. Es werden keine Remote-Server kontaktiert oder KI-Anfragen gestellt. Downloads von Rust und Cargo-Abhängigkeiten benötigen Internetzugriff. Derselbe Ablauf lässt sich lokal mit PowerShell 7 über `./scripts/ci.ps1` ausführen; OpenSSH und die Build-Voraussetzungen müssen installiert sein. Dies ersetzt keine grafischen Bedienungs- oder Treibertests.
+
 `cargo test --locked` prüft unter anderem Workspace-Kompatibilität, Ordnerübernahme bei Fokuswechsel, Teilungen, Anbieterpfade und den nativen Codex-Start. Die gebaute EXE bietet weitere lokale Tests:
 
 ```powershell
