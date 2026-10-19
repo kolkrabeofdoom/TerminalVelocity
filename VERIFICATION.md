@@ -59,3 +59,7 @@ Der finale Release-Build 0.5.0 und alle sechs PTY-Testmodi (Shells, Ordnerübern
 ## Einheitlicher Projektname 0.5.1 – 19. Oktober 2026
 
 Formatierung, alle 27 Hauptprüfungen einschließlich Offline-Remote-Tests, Release-Build und die vier PTY-Prüfungen (Ordner, Neustart, Profile, Suche) erfolgreich. Die umbenannte TerminalVelocity.exe besteht auch den Shelltest für PowerShell, CMD, Git Bash, Codex und Gemini; Claude und OpenAI API CLI sind lokal nicht installiert. Neue Prompt-Kennungen und der neue Git-Bash-Skriptpfad werden durch die Ordnerprüfungen erfasst. Keine echten Remote-Verbindungen oder KI-Anfragen.
+
+## Text-Nachleuchten 0.6.0 – 19. Oktober 2026
+
+28 Haupttests und drei Renderer-Tests bestanden. Neu geprüft: alte Einstellungsdateien, ungültige Stärke/Dauer, Speicherung, Änderungserkennung auch nach Leerlauf, Ablauf ohne Auffrischen bei stabilem Text, sofortiges Löschen, Grenzen für Glyphen und Lichtpunkte, Rücksetzen bei Layout/Schrift/Scrollback/Scrollposition/Alternativbildschirm sowie Clipping und Ende der Zeichenoperationen nach Ablauf. Release-Build und die vier PTY-Prüfungen (Ordner, Neustart, Profile, Suche) erfolgreich. Keine echten Remote-Verbindungen. Die Bewegung und Wirkung auf einem realen Monitor sind noch nicht visuell bestätigt.

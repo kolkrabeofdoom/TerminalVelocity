@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.6.0 – 19. Oktober 2026
+
+- Einstellbares Text-Nachleuchten für neue und geänderte Zeichen im Phosphor-Modus, mit Leuchtstärke und Dauer.
+- Sofortiges Entfernen gelöschter Zeichen; begrenzter Renderaufwand und Rücksetzen bei Ansichtsänderungen.
+- Renderer-Prüfungen laufen jetzt direkt in der Haupt-Test-Suite und in CI.
+
 ## 0.5.1 – 19. Oktober 2026
 
 - Einheitlicher Projektname TerminalVelocity in Dokumentation, EXE, Paketordner, Build- und CI-Skripten sowie Shell-Integration. Das Cargo-Paket heißt `terminalvelocity`, die Anwendung `TerminalVelocity.exe`.

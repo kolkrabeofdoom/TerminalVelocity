@@ -1803,20 +1803,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "terminalvelocity"
-version = "0.5.1"
-dependencies = [
- "eframe",
- "egui_term",
- "image",
- "raw-window-handle",
- "serde",
- "serde_json",
- "window-vibrancy",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2097,6 +2083,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "terminalvelocity"
+version = "0.6.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "egui_term",
+ "image",
+ "raw-window-handle",
+ "serde",
+ "serde_json",
+ "window-vibrancy",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

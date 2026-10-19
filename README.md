@@ -1,6 +1,6 @@
 # TerminalVelocity
 
-Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.5.1**.
+Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.6.0**.
 
 ## Funktionen
 
@@ -36,7 +36,7 @@ PowerShell 7 muss im PATH, unter `C:\Program Files\PowerShell\7` oder portabel u
 ./scripts/package.ps1
 ```
 
-Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/TerminalVelocity-0.5.1-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
+Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/TerminalVelocity-0.6.0-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
 
 Dieses Repository enthält die Quellen und die angepasste Terminalbibliothek. Kompilate, heruntergeladene Laufzeiten, Zugangsdaten, lokale Einstellungen und Testausgaben sind ausgeschlossen.
 
@@ -61,7 +61,7 @@ Unter **Einstellungen → Grafikeffekte** stehen **Aurora**, **Phosphor** und **
 
 Der Regler **Effektstärke** steuert die dekorativen Hintergründe und das Cursor-Leuchten. **Animationen** schaltet Bewegung und Cursor-Schweif aus; die Hintergrundgestaltung bleibt statisch. **Cursor-Schweif** lässt sich zusätzlich separat abschalten. Aurora mit 45 % Intensität ist die Voreinstellung. Einstellungen werden mit dem Workspace gespeichert; Projektprofile behalten die globalen Darstellungseinstellungen.
 
-Hintergründe werden hinter Terminalzellen gezeichnet, auf den jeweiligen Bereich begrenzt und nur im fokussierten aktiven Bereich animiert (20 angeforderte Hintergrundbilder pro Sekunde). Der Schweif umfasst maximal zwölf Spuren, klingt innerhalb von 0,32 Sekunden ab und wird bei Scrollen, Fokusverlust oder Layoutänderungen gelöscht. Inaktive Bereiche bleiben statisch. Das sind native egui/OpenGL-Effekte; Kitty-Shaderdateien lassen sich damit nicht importieren. Text-Nachleuchten ist noch nicht enthalten; eigene Bilder stehen seit 0.5.0 bereit.
+Hintergründe werden hinter Terminalzellen gezeichnet, auf den jeweiligen Bereich begrenzt und nur im fokussierten aktiven Bereich animiert (20 angeforderte Hintergrundbilder pro Sekunde). Der Schweif umfasst maximal zwölf Spuren, klingt innerhalb von 0,32 Sekunden ab und wird bei Scrollen, Fokusverlust oder Layoutänderungen gelöscht. Inaktive Bereiche bleiben statisch. Das sind native egui/OpenGL-Effekte; Kitty-Shaderdateien lassen sich damit nicht importieren. Text-Nachleuchten steht seit 0.6.0 bereit; eigene Bilder seit 0.5.0.
 
 ## Remote-Verbindungen (0.3.0)
 
@@ -171,3 +171,9 @@ Das Paket enthält `BUILD-INFO.json` mit Git-Commit, Änderungsstatus, rustc-/ca
 ZIP-Einträge sind sortiert und haben feste Zeitstempel. Zwei Packläufe mit identischen Quelldateien, Binärdateien und derselben .NET-Kompressionsumgebung ergeben dasselbe ZIP. Das ist keine Zusage bitidentischer EXE-Neukompilierung auf beliebigen Rechnern: dafür müssen auch Compiler, Windows SDK, Linker und Buildpfade übereinstimmen. Der hier geprüfte Compiler ist rustc 1.89.0, Target x86_64-pc-windows-msvc.
 
 Versionsänderungen stehen in [CHANGELOG.md](CHANGELOG.md).
+
+## Text-Nachleuchten (0.6.0)
+
+Unter **Einstellungen → Grafikeffekte → Phosphor** lassen sich **Text-Nachleuchten**, **Leuchtstärke** und **Nachleuchtdauer** einstellen. Neue und veränderte Zeichen erhalten einen abklingenden grünen oder bernsteinfarbenen Lichtsaum hinter der normalen Schrift. Standard: 50 % Leuchtstärke und 0,6 Sekunden; Dauer einstellbar von 0,1 bis 1,5 Sekunden. Die globale Effektstärke wirkt zusätzlich.
+
+Gelöschte Zeichen hinterlassen keine Textreste. Ohne Animationen, bei Fokusverlust, in anderen Presets oder bei Stärke null ist der Effekt aus. Bei Auswahl oder Suchtreffern wird er unterdrückt. Scrollposition, Scrollback-Wachstum, Schrift-/Layoutänderungen und Wechsel des alternativen Bildschirms setzen ihn zurück. Maximal 512 Zeichen leuchten gleichzeitig, Ansichten mit mehr als 8192 sichtbaren Textzeichen verzichten auf Nachleuchten. Während des Abklingens werden höchstens 20 zusätzliche Neuzeichnungen pro Sekunde angefordert. Alte Workspace-Dateien bleiben lesbar.

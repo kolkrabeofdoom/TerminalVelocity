@@ -29,6 +29,9 @@ pub struct Settings {
     pub animations: bool,
     pub cursor_trail: bool,
     pub amber: bool,
+    pub text_afterglow: bool,
+    pub afterglow_strength: f32,
+    pub afterglow_duration: f32,
 }
 
 impl Default for Settings {
@@ -39,12 +42,25 @@ impl Default for Settings {
             animations: true,
             cursor_trail: true,
             amber: false,
+            text_afterglow: true,
+            afterglow_strength: 0.5,
+            afterglow_duration: 0.6,
         }
     }
 }
 
 impl Settings {
     pub fn validate(&mut self) {
+        self.afterglow_strength = if self.afterglow_strength.is_finite() {
+            self.afterglow_strength.clamp(0.0, 1.0)
+        } else {
+            0.5
+        };
+        self.afterglow_duration = if self.afterglow_duration.is_finite() {
+            self.afterglow_duration.clamp(0.1, 1.5)
+        } else {
+            0.6
+        };
         self.intensity = if self.intensity.is_finite() {
             self.intensity.clamp(0.0, 1.0)
         } else {
@@ -63,6 +79,9 @@ impl Settings {
             animations: self.animations,
             cursor_trail: self.cursor_trail,
             amber: self.amber,
+            text_afterglow: self.text_afterglow,
+            afterglow_strength: self.afterglow_strength,
+            afterglow_duration: self.afterglow_duration,
         }
     }
     pub fn theme(&self) -> egui_term::TerminalTheme {
@@ -94,6 +113,14 @@ impl Settings {
             );
             if self.preset == Preset::Phosphor {
                 ui.checkbox(&mut self.amber, "Bernstein statt Grün");
+                ui.add_enabled_ui(self.animations, |ui| {
+                    ui.checkbox(&mut self.text_afterglow, "Text-Nachleuchten");
+                    ui.add_enabled_ui(self.text_afterglow, |ui| {
+                        ui.add(egui::Slider::new(&mut self.afterglow_strength, 0.0..=1.0).text("Leuchtstärke"));
+                        ui.add(egui::Slider::new(&mut self.afterglow_duration, 0.1..=1.5).suffix(" s").text("Nachleuchtdauer"));
+                    });
+                });
+                ui.small("Neue und geänderte Zeichen leuchten kurz auf. Gelöschte Zeichen hinterlassen keine Textspuren.");
             }
         });
         ui.small("Effekte liegen hinter dem Text. Animationen laufen nur im aktiven Bereich bei fokussiertem Fenster, mit höchstens 20 Hintergrundbildern pro Sekunde. Ohne Animationen bleibt der Hintergrund statisch.");
@@ -103,6 +130,29 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn afterglow_settings_migrate_validate_and_roundtrip() {
+        let old: Settings = serde_json::from_str(r#"{"preset":"Phosphor"}"#).unwrap();
+        assert!(old.text_afterglow);
+        assert_eq!(old.afterglow_duration, 0.6);
+        let mut settings = Settings {
+            text_afterglow: false,
+            afterglow_strength: f32::NAN,
+            afterglow_duration: f32::INFINITY,
+            ..old
+        };
+        settings.validate();
+        assert_eq!(settings.afterglow_strength, 0.5);
+        assert_eq!(settings.afterglow_duration, 0.6);
+        settings.afterglow_strength = 2.0;
+        settings.afterglow_duration = -1.0;
+        settings.validate();
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert!(!restored.visual().text_afterglow);
+        assert_eq!(restored.visual().afterglow_strength, 1.0);
+        assert_eq!(restored.visual().afterglow_duration, 0.1);
+    }
     #[test]
     fn persisted_settings_and_reduced_motion() {
         let mut settings = Settings {

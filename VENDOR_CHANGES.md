@@ -27,3 +27,7 @@ Die ursprüngliche MIT-Lizenz liegt unverändert unter `vendor/egui_term-0.1.0/L
 ## 0.5.0: Hintergrundtexturen
 
 BackgroundImage und TerminalView::set_background_image zeichnen eine geteilte GPU-Textur vor Effekten und Terminalzellen. Seitenverhältnis bleibt bei mittigem Zuschnitt oder Einpassen erhalten; Abdunklung und Clipping gelten je Terminalbereich. Der Decoder und asynchrone Ladecache liegen im Hauptprogramm.
+
+## 0.6.0: Text-Nachleuchten
+
+TextAfterglow speichert maximal 8192 aktuelle Glyphen und 512 Leuchtzeitpunkte. Neue/geänderte sichtbare Glyphen erhalten vier versetzte, quadratisch abklingende Lichtkonturen vor den Terminalzellen. Gelöschte Glyphen werden sofort verworfen. Fokus, Animationseinstellungen, Auswahl/Suchtreffer und Ansichtsänderungen begrenzen den Effekt. Die Tests der unveränderten Renderer-Quelldatei laufen jetzt über tests/renderer.rs in der Haupt-Suite.

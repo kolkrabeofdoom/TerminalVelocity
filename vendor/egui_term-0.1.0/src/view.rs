@@ -33,6 +33,7 @@ enum InputAction {
 pub struct TerminalViewState {
     is_dragged: bool,
     trail: crate::effects::CursorTrail,
+    afterglow: crate::effects::TextAfterglow,
     scroll_pixels: f32,
     current_mouse_position_on_grid: TerminalGridPoint,
 }
@@ -297,6 +298,17 @@ impl<'a> TerminalView<'a> {
             active,
         );
 
+        let enabled = active
+            && effects.preset == 2
+            && effects.animated()
+            && effects.text_afterglow
+            && effects.afterglow_strength.is_finite()
+            && effects.afterglow_strength > 0.0
+            && effects.afterglow_duration.is_finite()
+            && effects.afterglow_duration >= 0.1
+            && content.selectable_range.is_none()
+            && self.backend.search_status().1 == 0;
+        let mut glow_glyphs = Vec::new();
         let mut shapes = vec![Shape::Rect(RectShape::filled(
             Rect::from_min_max(layout_min, layout_max),
             CornerRadius::ZERO,
@@ -403,6 +415,18 @@ impl<'a> TerminalView<'a> {
 
             // Draw text content
             if indexed.c != ' ' && indexed.c != '\t' {
+                if enabled
+                    && glow_glyphs.len() < 8193
+                    && !flags.intersects(cell::Flags::HIDDEN)
+                    && !(cursor_visible
+                        && content.grid.cursor.point == indexed.point)
+                {
+                    glow_glyphs.push(crate::effects::GlowGlyph {
+                        key: (line_num, indexed.point.column.0),
+                        character: indexed.c,
+                        position: Pos2::new(x + cell_width / 2.0, y),
+                    });
+                }
                 if cursor_visible
                     && content.grid.cursor.point == indexed.point
                     && (is_app_cursor_mode || effects.strength() > 0.0)
@@ -424,6 +448,22 @@ impl<'a> TerminalView<'a> {
             }
         }
 
+        state.afterglow.update(
+            &glow_glyphs,
+            (
+                layout.rect,
+                self.font.font_type(),
+                content.grid.display_offset(),
+                alacritty_terminal::grid::Dimensions::history_size(
+                    &content.grid,
+                ),
+                content.terminal_mode.contains(TermMode::ALT_SCREEN),
+            ),
+            time,
+            enabled,
+            effects.afterglow_duration,
+        );
+        state.afterglow.paint(painter, &glow_glyphs, time, effects);
         painter.extend(shapes);
     }
 }
