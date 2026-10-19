@@ -1,8 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ai;
+mod background;
+mod effects;
 mod model;
 mod profiles;
+mod remote;
+mod remote_ui;
 
 use eframe::egui::{self, Color32, FontId, Key, Modifiers, Rect, Sense, Stroke};
 use egui_term::{
@@ -95,6 +99,7 @@ fn set_window_opacity(
 }
 
 struct TerminalApp {
+    background_cache: background::Cache,
     workspace: Workspace,
     sessions: HashMap<u64, Session>,
     sender: Sender<(u64, PtyEvent)>,
@@ -111,6 +116,7 @@ struct TerminalApp {
     ai_draft: Option<ai::Draft>,
     profiles: profiles::Library,
     profile_dialog: Option<profiles::Dialog>,
+    remote_dialog: Option<remote::Dialog>,
     profiles_error: Option<String>,
     search: Option<HistorySearch>,
     applied_acrylic: bool,
@@ -154,10 +160,11 @@ impl TerminalApp {
             }
             Err(error) => (Workspace::default(), format!("Lesefehler: {error}")),
         };
-        let (profiles, profiles_error) = match profiles::Library::load(&storage.with_file_name("profiles.json")) {
-            Ok(profiles) => (profiles, None),
-            Err(error) => (profiles::Library::default(), Some(error)),
-        };
+        let (profiles, profiles_error) =
+            match profiles::Library::load(&storage.with_file_name("profiles.json")) {
+                Ok(profiles) => (profiles, None),
+                Err(error) => (profiles::Library::default(), Some(error)),
+            };
         let (sender, receiver) = mpsc::channel();
         let panes = workspace.panes();
         let next_id = panes.iter().map(|p| p.id).max().unwrap_or(0) + 1;
@@ -168,6 +175,7 @@ impl TerminalApp {
             .display()
             .to_string();
         let mut app = Self {
+            background_cache: background::Cache::default(),
             workspace,
             sessions: HashMap::new(),
             sender,
@@ -184,6 +192,7 @@ impl TerminalApp {
             ai_draft: None,
             profiles,
             profile_dialog: None,
+            remote_dialog: None,
             profiles_error,
             search: None,
             applied_acrylic: false,
@@ -232,6 +241,11 @@ impl TerminalApp {
             }
             let (executable, args) = if let Some(command) = command {
                 command
+            } else if let Some(remote) = &pane.remote {
+                remote.command(
+                    &self.workspace,
+                    self.storage.parent().unwrap_or(std::path::Path::new(".")),
+                )?
             } else {
                 let executable = pane.shell.resolve(Some(&self.workspace.shell_paths[pane.shell as usize]), self.storage.parent().unwrap_or(std::path::Path::new("."))).ok_or_else(|| {
                 format!(
@@ -295,6 +309,7 @@ impl TerminalApp {
             })?;
         let command = draft.command(executable)?;
         let pane = Pane {
+            remote: None,
             id: self.next_id,
             shell: draft.provider,
             directory: draft.directory.clone(),
@@ -349,6 +364,7 @@ impl TerminalApp {
         let id = self.next_id;
         self.next_id += 1;
         Pane {
+            remote: None,
             id,
             shell: self.workspace.default_shell,
             directory: self
@@ -405,7 +421,7 @@ impl TerminalApp {
         }
     }
 
-    fn save_workspace(&mut self) {
+    fn save_workspace(&mut self) -> bool {
         self.workspace.default_directory = Some(PathBuf::from(&self.directory));
         let result = (|| -> Result<(), Box<dyn std::error::Error>> {
             let encoded = serde_json::to_vec_pretty(&self.workspace)?;
@@ -433,20 +449,34 @@ impl TerminalApp {
             std::fs::rename(temporary, &self.storage)?;
             Ok(())
         })();
+        let saved = result.is_ok();
         self.status = match result {
             Ok(()) => "Arbeitsbereich gespeichert".into(),
             Err(e) => format!("Speichern fehlgeschlagen: {e}"),
         };
+        saved
     }
 
     fn show_profiles(&mut self, saving: bool) {
-        let directory = self.workspace.inherited_directory(self.focused, &PathBuf::from(&self.directory));
+        let directory = self
+            .workspace
+            .inherited_directory(self.focused, &PathBuf::from(&self.directory));
         let first = self.profiles.profiles.first();
         self.profile_dialog = Some(profiles::Dialog {
             saving,
             name: String::new(),
-            directory: if saving { directory.display().to_string() } else { first.map(|p| p.directory.display().to_string()).unwrap_or_default() },
-            selected: if saving || first.is_none() { None } else { Some(0) },
+            directory: if saving {
+                directory.display().to_string()
+            } else {
+                first
+                    .map(|p| p.directory.display().to_string())
+                    .unwrap_or_default()
+            },
+            selected: if saving || first.is_none() {
+                None
+            } else {
+                Some(0)
+            },
             delete_target: None,
             error: self.profiles_error.clone(),
         });
@@ -454,7 +484,11 @@ impl TerminalApp {
 
     fn close_search(&mut self) {
         if let Some(search) = self.search.take() {
-            if let Some(backend) = self.sessions.get_mut(&search.pane_id).and_then(|s| s.backend.as_mut()) {
+            if let Some(backend) = self
+                .sessions
+                .get_mut(&search.pane_id)
+                .and_then(|s| s.backend.as_mut())
+            {
                 let _ = backend.set_search("");
             }
         }
@@ -463,73 +497,160 @@ impl TerminalApp {
     fn show_search(&mut self) {
         if let Some(search) = &mut self.search {
             search.focus_input = true;
-        } else if self.sessions.get(&self.focused).is_some_and(|s| s.backend.is_some()) {
-            self.search = Some(HistorySearch { pane_id: self.focused, query: String::new(), focus_input: true, error: None });
-        } else { self.status = "In diesem Bereich ist kein Terminalverlauf verfügbar.".into(); }
+        } else if self
+            .sessions
+            .get(&self.focused)
+            .is_some_and(|s| s.backend.is_some())
+        {
+            self.search = Some(HistorySearch {
+                pane_id: self.focused,
+                query: String::new(),
+                focus_input: true,
+                error: None,
+            });
+        } else {
+            self.status = "In diesem Bereich ist kein Terminalverlauf verfügbar.".into();
+        }
     }
 
     fn search_bar(&mut self, ctx: &egui::Context, background: Color32) {
-        if self.search.as_ref().is_some_and(|s| s.pane_id != self.focused)
-            || self.settings || self.profile_dialog.is_some() || self.ai_draft.is_some()
-            || self.restart_target.is_some() || self.close_target.is_some() {
+        if self
+            .search
+            .as_ref()
+            .is_some_and(|s| s.pane_id != self.focused)
+            || self.settings
+            || (self.profile_dialog.is_some() || self.remote_dialog.is_some())
+            || self.ai_draft.is_some()
+            || self.restart_target.is_some()
+            || self.close_target.is_some()
+        {
             self.close_search();
         }
-        let Some(search) = &mut self.search else { return; };
-        let Some(backend) = self.sessions.get_mut(&search.pane_id).and_then(|s| s.backend.as_mut()) else {
+        let Some(search) = &mut self.search else {
+            return;
+        };
+        let Some(backend) = self
+            .sessions
+            .get_mut(&search.pane_id)
+            .and_then(|s| s.backend.as_mut())
+        else {
             self.search = None;
             return;
         };
         let mut close = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
         let mut previous = ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Enter));
         let mut next = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter));
-        egui::TopBottomPanel::bottom("history_search").frame(egui::Frame::NONE.fill(background).inner_margin(6.0)).show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label("Verlauf durchsuchen");
-                let response = ui.add(egui::TextEdit::singleline(&mut search.query).id_salt("history-query").desired_width(280.0).hint_text("Suchtext (Groß-/Kleinschreibung beachten)"));
-                if search.focus_input { response.request_focus(); search.focus_input = false; }
-                if response.changed() { search.error = backend.set_search(&search.query).err(); }
-                let (active, count, truncated) = backend.search_status();
-                ui.label(if search.query.is_empty() { "Suchtext eingeben".into() } else if count == 0 { "Keine Treffer".into() } else { format!("{active} / {count}{}", if truncated { "+" } else { "" }) });
-                previous |= ui.add_enabled(count > 0, egui::Button::new("Zurück")).on_hover_text("Umschalt+Enter").clicked();
-                next |= ui.add_enabled(count > 0, egui::Button::new("Weiter")).on_hover_text("Enter").clicked();
-                close |= ui.button("Schließen (Esc)").clicked();
-                if let Some(error) = &search.error { ui.colored_label(Color32::LIGHT_RED, error); }
+        egui::TopBottomPanel::bottom("history_search")
+            .frame(egui::Frame::NONE.fill(background).inner_margin(6.0))
+            .show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Verlauf durchsuchen");
+                    let response = ui.add(
+                        egui::TextEdit::singleline(&mut search.query)
+                            .id_salt("history-query")
+                            .desired_width(280.0)
+                            .hint_text("Suchtext (Groß-/Kleinschreibung beachten)"),
+                    );
+                    if search.focus_input {
+                        response.request_focus();
+                        search.focus_input = false;
+                    }
+                    if response.changed() {
+                        search.error = backend.set_search(&search.query).err();
+                    }
+                    let (active, count, truncated) = backend.search_status();
+                    ui.label(if search.query.is_empty() {
+                        "Suchtext eingeben".into()
+                    } else if count == 0 {
+                        "Keine Treffer".into()
+                    } else {
+                        format!("{active} / {count}{}", if truncated { "+" } else { "" })
+                    });
+                    previous |= ui
+                        .add_enabled(count > 0, egui::Button::new("Zurück"))
+                        .on_hover_text("Umschalt+Enter")
+                        .clicked();
+                    next |= ui
+                        .add_enabled(count > 0, egui::Button::new("Weiter"))
+                        .on_hover_text("Enter")
+                        .clicked();
+                    close |= ui.button("Schließen (Esc)").clicked();
+                    if let Some(error) = &search.error {
+                        ui.colored_label(Color32::LIGHT_RED, error);
+                    }
+                });
             });
-        });
-        if previous || next { backend.next_search_match(previous); search.focus_input = true; }
+        if previous || next {
+            backend.next_search_match(previous);
+            search.focus_input = true;
+        }
         ctx.request_repaint_after(std::time::Duration::from_millis(300));
-        if close { self.close_search(); }
+        if close {
+            self.close_search();
+        }
     }
 
-    fn open_profile(&mut self, index: usize, directory: PathBuf, ctx: &egui::Context) -> Result<(), String> {
-        let profile = self.profiles.profiles.get(index).ok_or("Projektprofil fehlt")?;
+    fn open_profile(
+        &mut self,
+        index: usize,
+        directory: PathBuf,
+        ctx: &egui::Context,
+    ) -> Result<(), String> {
+        let profile = self
+            .profiles
+            .profiles
+            .get(index)
+            .ok_or("Projektprofil fehlt")?;
         let name = profile.name.clone();
         let (workspace, next_id) = profile.prepare(&directory, &self.workspace, self.next_id)?;
-        let panes: Vec<_> = workspace.panes().into_iter().filter(|p| p.id >= self.next_id).collect();
+        let panes: Vec<_> = workspace
+            .panes()
+            .into_iter()
+            .filter(|p| p.id >= self.next_id)
+            .collect();
         let base = self.storage.parent().unwrap_or(std::path::Path::new("."));
         for pane in &panes {
-            if pane.shell.resolve(Some(&workspace.shell_paths[pane.shell as usize]), base).is_none() {
-                return Err(format!("{} nicht gefunden. Bitte zuerst den Programmpfad unter Einstellungen prüfen.", pane.shell.label()));
+            if let Some(remote) = &pane.remote {
+                remote.command(&workspace, base)?;
+            } else if pane
+                .shell
+                .resolve(Some(&workspace.shell_paths[pane.shell as usize]), base)
+                .is_none()
+            {
+                return Err(format!(
+                    "{} nicht gefunden. Bitte zuerst den Programmpfad unter Einstellungen prüfen.",
+                    pane.shell.label()
+                ));
             }
         }
         self.workspace = workspace;
         self.next_id = next_id;
         self.directory = directory.display().to_string();
-        for pane in panes { self.start(ctx, &pane); }
+        for pane in panes {
+            self.start(ctx, &pane);
+        }
         self.focus_first();
         self.status = if self.sessions.values().any(|s| s.error.is_some()) {
             format!("Projekt „{name}“ geöffnet. Startfehler im betroffenen Bereich prüfen.")
-        } else { format!("Projekt „{name}“ in neuen Tabs geöffnet") };
+        } else {
+            format!("Projekt „{name}“ in neuen Tabs geöffnet")
+        };
         Ok(())
     }
 
     fn profile_window(&mut self, ctx: &egui::Context) {
-        let Some(mut dialog) = self.profile_dialog.take() else { return; };
+        let Some(mut dialog) = self.profile_dialog.take() else {
+            return;
+        };
         let mut open = true;
         let mut submit = false;
         let mut cancel = false;
         let mut delete = None;
-        let title = if dialog.saving { "Projektprofil speichern" } else { "Projekt öffnen" };
+        let title = if dialog.saving {
+            "Projektprofil speichern"
+        } else {
+            "Projekt öffnen"
+        };
         egui::Window::new(title).open(&mut open).default_width(620.0).vscroll(true).show(ctx, |ui| {
             if dialog.saving {
                 ui.label("Der aktuelle Aufbau wird als Vorlage gespeichert: Tabs, Teilungen, Anbieter und Bereichsordner.");
@@ -558,7 +679,7 @@ impl TerminalApp {
                 for tab in &profile.tabs { tab.root.panes(&mut panes); }
                 for pane in panes {
                     let directory = pane.directory.strip_prefix(&profile.directory).map(|relative| PathBuf::from(&dialog.directory).join(relative)).unwrap_or(pane.directory);
-                    ui.small(format!("{} · {}", pane.shell.label(), directory.display()));
+                    ui.small(format!("{} · lokaler Ordner: {}", pane.remote.as_ref().map(|r| r.label()).unwrap_or_else(|| pane.shell.label().into()), directory.display()));
                 }
                 if ui.button("Profil löschen …").clicked() { dialog.delete_target = dialog.selected; }
             }
@@ -595,8 +716,11 @@ impl TerminalApp {
             let result = if dialog.saving {
                 (|| -> Result<(), String> {
                     let directory = PathBuf::from(&dialog.directory);
-                    if !directory.is_dir() { return Err("Der Projektordner existiert nicht.".into()); }
-                    let profile = profiles::Profile::capture(&dialog.name, directory, &self.workspace)?;
+                    if !directory.is_dir() {
+                        return Err("Der Projektordner existiert nicht.".into());
+                    }
+                    let profile =
+                        profiles::Profile::capture(&dialog.name, directory, &self.workspace)?;
                     let mut updated = self.profiles.clone();
                     updated.profiles.push(profile);
                     updated.save(&self.storage.with_file_name("profiles.json"))?;
@@ -604,10 +728,21 @@ impl TerminalApp {
                     self.status = format!("Projektprofil „{}“ gespeichert", dialog.name.trim());
                     Ok(())
                 })()
-            } else { self.open_profile(dialog.selected.unwrap(), PathBuf::from(&dialog.directory), ctx) };
-            match result { Ok(()) => return, Err(error) => dialog.error = Some(error) }
+            } else {
+                self.open_profile(
+                    dialog.selected.unwrap(),
+                    PathBuf::from(&dialog.directory),
+                    ctx,
+                )
+            };
+            match result {
+                Ok(()) => return,
+                Err(error) => dialog.error = Some(error),
+            }
         }
-        if open && !cancel { self.profile_dialog = Some(dialog); }
+        if open && !cancel {
+            self.profile_dialog = Some(dialog);
+        }
     }
 
     fn close_pane(&mut self, id: u64, ctx: &egui::Context) {
@@ -646,6 +781,8 @@ fn draw_node(
     sessions: &mut HashMap<u64, Session>,
     focused: &mut u64,
     font_size: f32,
+    effects: &effects::Settings,
+    background_image: Option<egui_term::BackgroundImage>,
     enabled: bool,
     close: &mut Option<u64>,
     retry: &mut Option<u64>,
@@ -701,6 +838,8 @@ fn draw_node(
                 sessions,
                 focused,
                 font_size,
+                effects,
+                background_image,
                 enabled,
                 close,
                 retry,
@@ -713,6 +852,8 @@ fn draw_node(
                 sessions,
                 focused,
                 font_size,
+                effects,
+                background_image,
                 enabled,
                 close,
                 retry,
@@ -738,7 +879,11 @@ fn draw_node(
                 Stroke::new(
                     1.0_f32,
                     if active {
-                        Color32::from_rgb(66, 195, 185)
+                        if effects.visual().strength() > 0.0 {
+                            effects.visual().accent()
+                        } else {
+                            Color32::from_rgb(66, 195, 185)
+                        }
                     } else {
                         Color32::from_gray(55)
                     },
@@ -754,10 +899,10 @@ fn draw_node(
                         } else {
                             Color32::GRAY
                         },
-                        pane.shell.label(),
+                        pane.remote.as_ref().map(|r| r.label()).unwrap_or_else(|| pane.shell.label().into()),
                     );
                     ui.small(format!("#{}", pane.id));
-                    if ui.add_enabled(enabled, egui::Button::new("Sitzung neu starten").small()).on_hover_text("Gleicher Anbieter und aktueller Projektordner; bisherige Ausgabe wird geleert").clicked() {
+                    if ui.add_enabled(enabled, egui::Button::new(if pane.remote.is_some() { "Neu verbinden" } else { "Sitzung neu starten" }).small()).on_hover_text("Gleicher Anbieter und aktueller Projektordner; bisherige Ausgabe wird geleert").clicked() {
                         *retry = Some(pane.id);
                     }
                     if ui
@@ -769,7 +914,7 @@ fn draw_node(
                     }
                     ui.add(
                         egui::Label::new(
-                            egui::RichText::new(pane.directory.display().to_string())
+                            egui::RichText::new(format!("{}{}", if pane.remote.is_some() { "Lokaler Startordner: " } else { "" }, pane.directory.display()))
                                 .small()
                                 .weak(),
                         )
@@ -788,11 +933,14 @@ fn draw_node(
                     if session.exited {
                         ui.colored_label(
                             Color32::YELLOW,
-                            "Sitzung beendet. Mit „Sitzung neu starten“ oben erneut öffnen.",
+                            if pane.remote.is_some() { "Verbindung beendet. Ausgabe bleibt erhalten; oben mit „Neu verbinden“ erneut öffnen." } else { "Sitzung beendet. Mit „Sitzung neu starten“ oben erneut öffnen." },
                         );
                     }
                     if let Some(backend) = &mut session.backend {
                         let view = TerminalView::new(ui, backend)
+                            .set_background_image(background_image)
+                            .set_effects(effects.visual())
+                            .set_theme(effects.theme())
                             .set_focus(active && enabled && !session.exited)
                             .set_font(TerminalFont::new(FontSettings {
                                 font_type: FontId::monospace(font_size),
@@ -808,6 +956,7 @@ fn draw_node(
                                     ui.close_menu();
                                 }
                                 ui.separator();
+                                if pane.remote.is_some() { ui.small("KI-Übergabe öffnet eine lokale KI-Sitzung."); }
                                 for action in ai::QuickAction::ALL {
                                     if ui.add_enabled(selected, egui::Button::new(action.label())).clicked() {
                                         *ai_selection = Some(ai::Draft::new(action.prompt(&text), pane.directory.clone(), pane.shell));
@@ -837,6 +986,20 @@ impl eframe::App for TerminalApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.background_cache.update(
+            ctx,
+            &self.workspace.background,
+            self.storage.parent().unwrap_or(std::path::Path::new(".")),
+        );
+        let dialog_owner = raw_window_handle::HasWindowHandle::window_handle(frame)
+            .ok()
+            .and_then(|h| match h.as_raw() {
+                raw_window_handle::RawWindowHandle::Win32(h) => {
+                    Some(h.hwnd.get() as *mut std::ffi::c_void)
+                }
+                _ => None,
+            })
+            .unwrap_or(std::ptr::null_mut());
         while let Ok((id, event)) = self.receiver.try_recv() {
             handle_session_event(&mut self.workspace, &mut self.sessions, id, event);
         }
@@ -845,13 +1008,22 @@ impl eframe::App for TerminalApp {
             shift: true,
             ..Modifiers::NONE
         };
-        if !self.settings && self.profile_dialog.is_none() && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none()
-            && ctx.input_mut(|i| i.consume_key(Modifiers::CTRL, Key::F)) { self.show_search(); }
+        if !self.settings
+            && self.profile_dialog.is_none()
+            && self.remote_dialog.is_none()
+            && self.ai_draft.is_none()
+            && self.close_target.is_none()
+            && self.restart_target.is_none()
+            && ctx.input_mut(|i| i.consume_key(Modifiers::CTRL, Key::F))
+        {
+            self.show_search();
+        }
         if !self.settings
             && self.close_target.is_none()
             && self.restart_target.is_none()
             && self.ai_draft.is_none()
             && self.profile_dialog.is_none()
+            && self.remote_dialog.is_none()
             && self.search.is_none()
         {
             if ctx.input_mut(|i| i.consume_key(shortcuts, Key::T)) {
@@ -893,12 +1065,27 @@ impl eframe::App for TerminalApp {
         egui::TopBottomPanel::top("toolbar")
             .frame(egui::Frame::NONE.fill(background).inner_margin(6.0))
             .show(ctx, |ui| {
-                if self.profile_dialog.is_some() { ui.disable(); }
+                if self.profile_dialog.is_some() || self.remote_dialog.is_some() {
+                    ui.disable();
+                }
                 ui.add_space(5.0);
                 ui.horizontal_wrapped(|ui| {
-                    ui.strong("RUST TERMINAL");
+                    ui.strong("TERMINALVELOCITY");
+                    if ui
+                        .add_enabled(
+                            !self.settings
+                                && self.ai_draft.is_none()
+                                && self.close_target.is_none()
+                                && self.restart_target.is_none(),
+                            egui::Button::new("Verbinden …"),
+                        )
+                        .clicked()
+                    {
+                        self.close_search();
+                        self.remote_dialog = Some(remote::Dialog::default());
+                    }
                     ui.label(
-                        egui::RichText::new("PROTOTYP 0.2.1 · VERLAUFSSUCHE")
+                        egui::RichText::new("0.5.0 · HINTERGRUNDBILDER")
                             .small()
                             .color(Color32::from_rgb(100, 210, 190)),
                     );
@@ -945,9 +1132,43 @@ impl eframe::App for TerminalApp {
                     if ui.button("Einstellungen").clicked() {
                         self.settings = !self.settings;
                     }
-                    if ui.add_enabled(!self.settings && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none(), egui::Button::new("Suchen")).on_hover_text("Strg+F · Aktiven Terminalverlauf durchsuchen").clicked() { self.show_search(); }
-                    if ui.add_enabled(!self.settings && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none(), egui::Button::new("Projekt öffnen")).clicked() { self.show_profiles(false); }
-                    if ui.add_enabled(!self.settings && self.ai_draft.is_none() && self.close_target.is_none() && self.restart_target.is_none(), egui::Button::new("Projekt speichern …")).clicked() { self.show_profiles(true); }
+                    if ui
+                        .add_enabled(
+                            !self.settings
+                                && self.ai_draft.is_none()
+                                && self.close_target.is_none()
+                                && self.restart_target.is_none(),
+                            egui::Button::new("Suchen"),
+                        )
+                        .on_hover_text("Strg+F · Aktiven Terminalverlauf durchsuchen")
+                        .clicked()
+                    {
+                        self.show_search();
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.settings
+                                && self.ai_draft.is_none()
+                                && self.close_target.is_none()
+                                && self.restart_target.is_none(),
+                            egui::Button::new("Projekt öffnen"),
+                        )
+                        .clicked()
+                    {
+                        self.show_profiles(false);
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.settings
+                                && self.ai_draft.is_none()
+                                && self.close_target.is_none()
+                                && self.restart_target.is_none(),
+                            egui::Button::new("Projekt speichern …"),
+                        )
+                        .clicked()
+                    {
+                        self.show_profiles(true);
+                    }
                 });
                 ui.horizontal_wrapped(|ui| {
                     let mut selected = None;
@@ -990,6 +1211,7 @@ impl eframe::App for TerminalApp {
                         && self.restart_target.is_none()
                         && self.ai_draft.is_none()
                         && self.profile_dialog.is_none()
+                        && self.remote_dialog.is_none()
                         && self.search.is_none();
                     draw_node(
                         ui,
@@ -998,6 +1220,8 @@ impl eframe::App for TerminalApp {
                         &mut self.sessions,
                         &mut self.focused,
                         self.workspace.font_size,
+                        &self.workspace.effects,
+                        self.background_cache.image(&self.workspace.background),
                         enabled,
                         &mut self.close_target,
                         &mut retry_target,
@@ -1012,6 +1236,7 @@ impl eframe::App for TerminalApp {
             self.ai_draft = Some(draft);
         }
         self.profile_window(ctx);
+        self.remote_window(ctx);
         let mut submit = false;
         let mut cancel = false;
         let mut open = true;
@@ -1024,7 +1249,7 @@ impl eframe::App for TerminalApp {
                         for provider in ai::PROVIDERS { ui.selectable_value(&mut draft.provider, provider, provider.label()); }
                     });
                 });
-                ui.label("Projektordner");
+                ui.label("Lokaler Projektordner (KI läuft auf diesem Computer)");
                 let mut path = draft.directory.display().to_string();
                 if ui.text_edit_singleline(&mut path).changed() { draft.directory = PathBuf::from(path); }
                 if draft.provider == Shell::OpenAI {
@@ -1060,7 +1285,7 @@ impl eframe::App for TerminalApp {
         }
         let mut apply_paths = false;
         if self.settings {
-            egui::Window::new("Einstellungen").open(&mut self.settings).resizable(false).show(ctx, |ui| {
+            egui::Window::new("Einstellungen").open(&mut self.settings).resizable(false).vscroll(true).show(ctx, |ui| {
                 ui.checkbox(&mut self.workspace.compatibility_transparency, "Kompatible Fenstertransparenz");
                 let minimum = if self.workspace.compatibility_transparency { 0.2 } else { 0.0 };
                 ui.add(egui::Slider::new(&mut self.workspace.opacity, minimum..=1.0).text("Deckkraft"));
@@ -1073,11 +1298,17 @@ impl eframe::App for TerminalApp {
                 ui.add_enabled(!self.workspace.compatibility_transparency, egui::Checkbox::new(&mut self.workspace.acrylic, "Hintergrund weichzeichnen (Windows-Acryl)"));
                 ui.add(egui::Slider::new(&mut self.workspace.font_size, 10.0..=28.0).text("Schriftgröße"));
                 ui.separator();
+                self.workspace.effects.ui(ui);
+                ui.separator();
+                self.background_cache.ui(ui, &mut self.workspace.background, dialog_owner);
+                ui.separator();
                 ui.label("Startordner ohne aktiven Bereich");
                 ui.small("Neue Tabs und Teilungen übernehmen den aktuellen Ordner des aktiven Bereichs. KI-Sitzungen starten im selben Projektordner.");
                 ui.text_edit_singleline(&mut self.directory);
                 if !PathBuf::from(&self.directory).is_dir() { ui.colored_label(Color32::LIGHT_RED, "Dieser Ordner existiert nicht."); }
                 ui.separator();
+                ui.label("OpenSSH (leer = automatisch erkennen)");
+                ui.text_edit_singleline(&mut self.workspace.ssh_path);
                 ui.label("Shells und KI-CLIs (leer = automatisch erkennen)");
                 egui::ScrollArea::vertical().max_height(330.0).show(ui, |ui| {
                 for shell in Shell::ALL {
@@ -1146,7 +1377,7 @@ impl eframe::App for TerminalApp {
             let mut cancel = false;
             egui::Window::new("Sitzung neu starten?").collapsible(false).resizable(false).show(ctx, |ui| {
                 if let Some(pane) = self.workspace.panes().into_iter().find(|pane| pane.id == id) {
-                    ui.label(format!("{} · Bereich #{id}", pane.shell.label()));
+                    ui.label(format!("{} · Bereich #{id}", pane.remote.as_ref().map(|r| r.label()).unwrap_or_else(|| pane.shell.label().into())));
                     ui.label(format!("Projektordner: {}", pane.directory.display()));
                 }
                 ui.label("Laufende Prozesse in diesem Bereich werden beendet. Die Ausgabe wird geleert.");
@@ -1368,6 +1599,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
             workspace.tabs.push(Tab {
                 name: "source".into(),
                 root: Node::Pane(Pane {
+                    remote: None,
                     id: 1,
                     shell,
                     directory: base.clone(),
@@ -1464,11 +1696,13 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
                 axis: Axis::Columns,
                 ratio: 0.5,
                 first: Box::new(Node::Pane(Pane {
+                    remote: None,
                     id: 1,
                     shell: Shell::PowerShell,
                     directory: base.clone(),
                 })),
                 second: Box::new(Node::Pane(Pane {
+                    remote: None,
                     id: 2,
                     shell: Shell::Cmd,
                     directory: base.clone(),
@@ -1477,6 +1711,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
         }];
         let (sender, receiver) = mpsc::channel();
         let mut app = TerminalApp {
+            background_cache: background::Cache::default(),
             workspace,
             sessions: HashMap::new(),
             sender,
@@ -1493,6 +1728,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             ai_draft: None,
             profiles: profiles::Library::default(),
             profile_dialog: None,
+            remote_dialog: None,
             profiles_error: None,
             search: None,
             applied_acrylic: false,
@@ -1696,7 +1932,11 @@ fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
                 "@private-file".into(),
             ]
             .into_iter()
-            .chain(ai::QuickAction::ALL.into_iter().map(|action| action.prompt(&text)))
+            .chain(
+                ai::QuickAction::ALL
+                    .into_iter()
+                    .map(|action| action.prompt(&text)),
+            )
             .map(move |text| (provider, text))
         }) {
             let mut draft = ai::Draft::new(text.clone(), root.clone(), provider);
@@ -1752,9 +1992,18 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
     fn wait_output(backend: &mut TerminalBackend, marker: &str) -> Result<(), String> {
         let deadline = Instant::now() + Duration::from_secs(20);
         loop {
-            let text: String = backend.sync().grid.display_iter().map(|cell| cell.c).collect();
-            if text.contains(marker) { return Ok(()); }
-            if Instant::now() >= deadline { return Err(format!("Profil-PTY: {marker} fehlt: {text}")); }
+            let text: String = backend
+                .sync()
+                .grid
+                .display_iter()
+                .map(|cell| cell.c)
+                .collect();
+            if text.contains(marker) {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(format!("Profil-PTY: {marker} fehlt: {text}"));
+            }
             std::thread::sleep(Duration::from_millis(30));
         }
     }
@@ -1767,58 +2016,129 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
         std::fs::create_dir_all(old.join("src"))?;
         std::fs::create_dir_all(new.join("src"))?;
         let workspace = Workspace {
-            tabs: vec![Tab { name: "Projekt".into(), root: Node::Split {
-                axis: Axis::Columns, ratio: 0.4,
-                first: Box::new(Node::Pane(Pane { id: 1, shell: Shell::Cmd, directory: old.clone() })),
-                second: Box::new(Node::Pane(Pane { id: 2, shell: Shell::Cmd, directory: old.join("src") })),
-            } }],
+            tabs: vec![Tab {
+                name: "Projekt".into(),
+                root: Node::Split {
+                    axis: Axis::Columns,
+                    ratio: 0.4,
+                    first: Box::new(Node::Pane(Pane {
+                        remote: None,
+                        id: 1,
+                        shell: Shell::Cmd,
+                        directory: old.clone(),
+                    })),
+                    second: Box::new(Node::Pane(Pane {
+                        remote: None,
+                        id: 2,
+                        shell: Shell::Cmd,
+                        directory: old.join("src"),
+                    })),
+                },
+            }],
             default_shell: Shell::Cmd,
             ..Workspace::default()
         };
         let profile = profiles::Profile::capture("Testprojekt", old, &workspace)?;
         let (sender, receiver) = mpsc::channel();
         let mut app = TerminalApp {
-            workspace, sessions: HashMap::new(), sender, receiver, focused: 1,
-            next_id: 3, next_session_id: 1, settings: false,
-            directory: base.display().to_string(), status: String::new(),
-            storage: base.join("unused-profile-test.json"), close_target: None,
-            restart_target: None, ai_draft: None,
-            profiles: profiles::Library { version: 1, profiles: vec![profile] },
-            profile_dialog: None, profiles_error: None, search: None,
-            applied_acrylic: false, applied_opacity: None,
+            background_cache: background::Cache::default(),
+            workspace,
+            sessions: HashMap::new(),
+            sender,
+            receiver,
+            focused: 1,
+            next_id: 3,
+            next_session_id: 1,
+            settings: false,
+            directory: base.display().to_string(),
+            status: String::new(),
+            storage: base.join("unused-profile-test.json"),
+            close_target: None,
+            restart_target: None,
+            ai_draft: None,
+            profiles: profiles::Library {
+                version: 1,
+                profiles: vec![profile],
+            },
+            profile_dialog: None,
+            remote_dialog: None,
+            profiles_error: None,
+            search: None,
+            applied_acrylic: false,
+            applied_opacity: None,
         };
         let ctx = egui::Context::default();
-        for pane in app.workspace.panes() { app.start(&ctx, &pane); }
+        for pane in app.workspace.panes() {
+            app.start(&ctx, &pane);
+        }
         let generations = [app.sessions[&1].generation, app.sessions[&2].generation];
-        app.sessions.get_mut(&1).unwrap().backend.as_mut().ok_or("Alte PTY fehlt")?.process_command(egui_term::BackendCommand::Write(b"set TV_PROFILE_STATE=OLD\r".to_vec()));
-        if app.open_profile(0, root.join("missing"), &ctx).is_ok() || app.sessions.len() != 2 || app.workspace.tabs.len() != 1 {
+        app.sessions
+            .get_mut(&1)
+            .unwrap()
+            .backend
+            .as_mut()
+            .ok_or("Alte PTY fehlt")?
+            .process_command(egui_term::BackendCommand::Write(
+                b"set TV_PROFILE_STATE=OLD\r".to_vec(),
+            ));
+        if app.open_profile(0, root.join("missing"), &ctx).is_ok()
+            || app.sessions.len() != 2
+            || app.workspace.tabs.len() != 1
+        {
             return Err("Fehlerhafter Profilstart hat den Arbeitsbereich verändert".into());
         }
         app.open_profile(0, new.clone(), &ctx)?;
-        if app.workspace.tabs.len() != 2 || app.sessions.len() != 4 || app.workspace.active_tab != 1
-            || app.sessions[&1].generation != generations[0] || app.sessions[&2].generation != generations[1] {
+        if app.workspace.tabs.len() != 2
+            || app.sessions.len() != 4
+            || app.workspace.active_tab != 1
+            || app.sessions[&1].generation != generations[0]
+            || app.sessions[&2].generation != generations[1]
+        {
             return Err("Profilstart hat laufende Sitzungen oder das Layout verändert".into());
         }
         for (id, directory) in [(3, new.clone()), (4, new.join("src"))] {
-            let backend = app.sessions.get_mut(&id).unwrap().backend.as_mut().ok_or("Neue PTY fehlt")?;
+            let backend = app
+                .sessions
+                .get_mut(&id)
+                .unwrap()
+                .backend
+                .as_mut()
+                .ok_or("Neue PTY fehlt")?;
             backend.process_command(egui_term::BackendCommand::Write(b"@echo off\rif defined TV_PROFILE_STATE (echo STALE_STATE) else (echo FRESH_STATE)\r".to_vec()));
-            backend.process_command(egui_term::BackendCommand::Write(b"echo PROFILE_CWD:%CD%\r".to_vec()));
+            backend.process_command(egui_term::BackendCommand::Write(
+                b"echo PROFILE_CWD:%CD%\r".to_vec(),
+            ));
             wait_output(backend, "FRESH_STATE")?;
             wait_output(backend, &format!("PROFILE_CWD:{}", directory.display()))?;
         }
         let original = app.sessions.get_mut(&1).unwrap().backend.as_mut().unwrap();
-        original.process_command(egui_term::BackendCommand::Write(b"@echo off\recho PRESERVED_STATE:%TV_PROFILE_STATE%\r".to_vec()));
+        original.process_command(egui_term::BackendCommand::Write(
+            b"@echo off\recho PRESERVED_STATE:%TV_PROFILE_STATE%\r".to_vec(),
+        ));
         wait_output(original, "PRESERVED_STATE:OLD")?;
         drop(app);
         Ok(())
     })();
     // All folders below this uniquely created test root are owned by this test.
-    if root.parent() != Some(std::env::temp_dir().as_path()) || !root.file_name().unwrap().to_string_lossy().starts_with("RustTerminal Profile ü ") {
+    if root.parent() != Some(std::env::temp_dir().as_path())
+        || !root
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("RustTerminal Profile ü ")
+    {
         return Err("Unerwarteter Testordner; Aufräumen abgebrochen".into());
     }
     let mut cleanup = std::fs::remove_dir_all(&root);
     for _ in 0..30 {
-        if cleanup.is_ok() || cleanup.as_ref().is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound) { cleanup = Ok(()); break; }
+        if cleanup.is_ok()
+            || cleanup
+                .as_ref()
+                .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+        {
+            cleanup = Ok(());
+            break;
+        }
         // PTY shutdown is asynchronous; allow Windows to release child working directories.
         std::thread::sleep(Duration::from_millis(100));
         cleanup = std::fs::remove_dir_all(&root);
@@ -1834,9 +2154,18 @@ fn search_test() -> Result<(), Box<dyn std::error::Error>> {
     fn wait(backend: &mut TerminalBackend, marker: &str) -> Result<(), String> {
         let deadline = Instant::now() + Duration::from_secs(20);
         loop {
-            let text: String = backend.sync().grid.display_iter().map(|cell| cell.c).collect();
-            if text.contains(marker) { return Ok(()); }
-            if Instant::now() >= deadline { return Err(format!("Suchtest: Ausgabe fehlt: {marker}")); }
+            let text: String = backend
+                .sync()
+                .grid
+                .display_iter()
+                .map(|cell| cell.c)
+                .collect();
+            if text.contains(marker) {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(format!("Suchtest: Ausgabe fehlt: {marker}"));
+            }
             std::thread::sleep(Duration::from_millis(30));
         }
     }
@@ -1846,46 +2175,88 @@ fn search_test() -> Result<(), Box<dyn std::error::Error>> {
     let (program, _) = Shell::Cmd.launch(executable, &base, false)?;
     let commands = format!("(for /L %i in (1,1,140) do @echo TV_SEARCH_%i literal.[x] Grüße) & echo {}WRAP_NEEDLE & echo TV_SEARCH_DONE", "X".repeat(75));
     let args = vec!["/D".into(), "/Q".into(), "/K".into(), commands];
-    let mut backend = TerminalBackend::new(1, egui::Context::default(), sender, BackendSettings {
-        shell: program.display().to_string(), args, working_directory: Some(base),
-    })?;
+    let mut backend = TerminalBackend::new(
+        1,
+        egui::Context::default(),
+        sender,
+        BackendSettings {
+            shell: program.display().to_string(),
+            args,
+            working_directory: Some(base),
+        },
+    )?;
     wait(&mut backend, "TV_SEARCH_DONE")?;
     backend.set_search("literal.[x]")?;
     let (start, count, _) = backend.search_status();
-    if count != 140 { return Err(format!("Wörtliche Suche: erwartet 140 Treffer, erhalten {count}").into()); }
+    if count != 140 {
+        return Err(format!("Wörtliche Suche: erwartet 140 Treffer, erhalten {count}").into());
+    }
     backend.next_search_match(false);
-    if backend.search_status().0 != start % count + 1 { return Err("Vorwärtssuche fehlerhaft".into()); }
+    if backend.search_status().0 != start % count + 1 {
+        return Err("Vorwärtssuche fehlerhaft".into());
+    }
     backend.next_search_match(true);
-    if backend.search_status().0 != start { return Err("Rückwärtssuche fehlerhaft".into()); }
-    for _ in 0..count { backend.next_search_match(false); }
-    if backend.search_status().0 != start { return Err("Umlauf der Suche fehlerhaft".into()); }
+    if backend.search_status().0 != start {
+        return Err("Rückwärtssuche fehlerhaft".into());
+    }
+    for _ in 0..count {
+        backend.next_search_match(false);
+    }
+    if backend.search_status().0 != start {
+        return Err("Umlauf der Suche fehlerhaft".into());
+    }
     backend.set_search("TV_SEARCH_1 ")?;
     backend.sync();
     if backend.search_status().1 != 1 || backend.last_content().grid.display_offset() == 0 {
         return Err("Treffer im zurückliegenden Verlauf nicht angesprungen".into());
     }
-    if !backend.last_content().grid.display_iter().any(|cell| backend.search_highlight(cell.point) == Some(true)) {
+    if !backend
+        .last_content()
+        .grid
+        .display_iter()
+        .any(|cell| backend.search_highlight(cell.point) == Some(true))
+    {
         return Err("Aktiver Treffer wird nicht hervorgehoben".into());
     }
     backend.set_search("WRAP_NEEDLE")?;
     backend.sync();
-    let lines: std::collections::HashSet<_> = backend.last_content().grid.display_iter().filter(|cell| backend.search_highlight(cell.point).is_some()).map(|cell| cell.point.line.0).collect();
-    if backend.search_status().1 != 1 || lines.len() != 2 { return Err("Suche über weichen Zeilenumbruch fehlerhaft".into()); }
+    let lines: std::collections::HashSet<_> = backend
+        .last_content()
+        .grid
+        .display_iter()
+        .filter(|cell| backend.search_highlight(cell.point).is_some())
+        .map(|cell| cell.point.line.0)
+        .collect();
+    if backend.search_status().1 != 1 || lines.len() != 2 {
+        return Err("Suche über weichen Zeilenumbruch fehlerhaft".into());
+    }
     backend.set_search("Grüße")?;
-    if backend.search_status().1 != 140 { return Err("Unicode-Suche fehlerhaft".into()); }
+    if backend.search_status().1 != 140 {
+        return Err("Unicode-Suche fehlerhaft".into());
+    }
     backend.set_search("LITERAL.[x]")?;
-    if backend.search_status().1 != 0 { return Err("Groß-/Kleinschreibung wird nicht beachtet".into()); }
+    if backend.search_status().1 != 0 {
+        return Err("Groß-/Kleinschreibung wird nicht beachtet".into());
+    }
     backend.set_search("TV_SEARCH_LIVE")?;
-    backend.process_command(egui_term::BackendCommand::Write(b"echo TV_SEARCH_LIVE\r".to_vec()));
+    backend.process_command(egui_term::BackendCommand::Write(
+        b"echo TV_SEARCH_LIVE\r".to_vec(),
+    ));
     let deadline = Instant::now() + Duration::from_secs(20);
     while backend.search_status().1 == 0 {
         backend.sync();
-        if Instant::now() >= deadline { return Err("Neue Ausgabe wurde nicht in die Suche aufgenommen".into()); }
+        if Instant::now() >= deadline {
+            return Err("Neue Ausgabe wurde nicht in die Suche aufgenommen".into());
+        }
         std::thread::sleep(Duration::from_millis(30));
     }
-    if backend.set_search(&"a".repeat(257)).is_ok() { return Err("Zu langer Suchtext akzeptiert".into()); }
+    if backend.set_search(&"a".repeat(257)).is_ok() {
+        return Err("Zu langer Suchtext akzeptiert".into());
+    }
     backend.set_search("")?;
-    if backend.search_status() != (0, 0, false) { return Err("Suche nicht zurückgesetzt".into()); }
+    if backend.search_status() != (0, 0, false) {
+        return Err("Suche nicht zurückgesetzt".into());
+    }
     std::fs::write(std::env::current_exe()?.with_file_name("search-test.txt"), "OK: echte CMD-PTY; 140 wörtliche Treffer im Verlauf; Vor-/Rückwärtssuche und Umlauf; Scrollen zu älteren Treffern und Markierung; weiche Zeilenumbrüche; Unicode; Groß-/Kleinschreibung; neue Ausgabe; Eingabelimit und Leeren der Suche. Keine KI-Anfragen gesendet.")?;
     Ok(())
 }
@@ -1893,14 +2264,24 @@ fn search_test() -> Result<(), Box<dyn std::error::Error>> {
 fn main() -> eframe::Result {
     if std::env::args().any(|arg| arg == "--search-test") {
         if let Err(error) = search_test() {
-            let _ = std::fs::write(std::env::current_exe().unwrap_or_default().with_file_name("search-test.txt"), format!("FEHLER: {error}"));
+            let _ = std::fs::write(
+                std::env::current_exe()
+                    .unwrap_or_default()
+                    .with_file_name("search-test.txt"),
+                format!("FEHLER: {error}"),
+            );
             std::process::exit(1);
         }
         return Ok(());
     }
     if std::env::args().any(|arg| arg == "--profile-test") {
         if let Err(error) = profile_test() {
-            let _ = std::fs::write(std::env::current_exe().unwrap_or_default().with_file_name("profile-test.txt"), format!("FEHLER: {error}"));
+            let _ = std::fs::write(
+                std::env::current_exe()
+                    .unwrap_or_default()
+                    .with_file_name("profile-test.txt"),
+                format!("FEHLER: {error}"),
+            );
             std::process::exit(1);
         }
         return Ok(());
@@ -1950,7 +2331,7 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     eframe::run_native(
-        "Rust Terminal · 0.2.1 · Verlaufssuche",
+        "TerminalVelocity · 0.5.0 · Hintergrundbilder",
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([1200.0, 760.0])

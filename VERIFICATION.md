@@ -24,3 +24,34 @@ Nicht praktisch geprüft: Git Bash (lokal nicht installiert), alle Grafikkarten 
 
 Das portable Paketskript prüft die SHA256-Summe der festgeschriebenen PowerShell-ZIP vor dem Entpacken. Anbieter-CLIs benötigen eigene Installation und Anmeldung. Die Arbeitsbereichsdatei speichert keine laufenden Prozesse, Terminalausgaben oder KI-Chat-Verläufe.
 
+
+
+## Lokale Nachprüfung und Version 0.3.0 – 19. Oktober 2026
+
+Windows x64, Rust Stable/MSVC. 17 reguläre Tests und drei explizit aktivierte Offline-Integrationstests bestehen (`cargo test --locked -- --include-ignored`, insgesamt 20).
+
+Neu geprüft: sichere SSH-Argumenttrennung und Hostvalidierung; OpenSSH-Konfigurationsauswertung mit Hostalias, Konto, Port und ProxyJump über `ssh -G` ohne Verbindung; PowerShell-Parser mit Sonderzeichen in Konto/Endpunkt und ersetzten Netzwerk-/Anmelde-Cmdlets; Ende des WinRM-Hostprozesses nach simulierter Sitzungsrückkehr über eine echte Windows-PTY. Der letzte Test deckte einen zunächst verbleibenden lokalen Prompt auf; der finale lokale Prompt beendet nun explizit den Hostprozess. Ebenfalls geprüft: alte Pane-Daten ohne Remote-Feld, Roundtrip von Remote-Layouts, Projektprofil-Übernahme mit neuen IDs, unabhängige Profilkopien und Ausschluss von Remote-Titeln bei lokalen Ordneränderungen.
+
+Git Bash: Start und Ordnerübernahme wurden inzwischen praktisch über PTYs geprüft (inklusive Leerzeichen, Apostroph und Unicode). Beim direkten Cargo-Build muss shells/rust-terminal.bash neben der EXE liegen; scripts/build.ps1 liefert es nun ebenfalls mit.
+
+Echte SSH-/WinRM-Anmeldungen wurden auf Wunsch ausschließlich durch Offline-Tests ersetzt; keine Serververbindung oder KI-Anfrage. Grafische Klickpfade der Remote-Dialoge wurden nicht automatisiert geprüft. Die Computer-Use-Anleitung untersagt Terminal-App-Automatisierung. Authentifizierung, erreichbare Server, Zertifikate und reale Remote-Abbrüche bleiben praktisch ungeprüft.
+
+Der finale 0.3.0-Release-Build und alle sechs PTY-Modi (--smoke-test, --directory-test, --restart-test, --profile-test, --search-test, --handoff-test) bestehen. Der Shelltest prüft PowerShell, CMD, Git Bash, Codex und Gemini; Claude und OpenAI API CLI sind hier nicht installiert und werden übersprungen.
+
+
+## Grafikeffekte 0.4.0 – 19. Oktober 2026
+
+Release-Build erfolgreich. 23 Aufrufe der Haupt-Test-Suite erfolgreich (einschließlich drei Remote-Offline-Integrationstests und eines Renderdaten-Exports). Ein zusätzlicher Test der tatsächlich eingebetteten Rendererdatei prüft Begrenzung/Verblassen des Cursor-Schweifs sowie Zurücksetzen bei Scrollen, Fokuswechsel, Größenänderung und verschwundenem Cursor. Die Tests prüfen auch persistierte Darstellungseinstellungen, Intensitätsgrenzen, vollständiges Ausschalten, statische Ausgabe bei deaktivierten Animationen und gültige, begrenzte Rendergeometrie.
+
+Alle sechs bestehenden PTY-Testmodi bestehen mit 0.4.0. Nach der abschließenden Farbanpassung wurden die drei Effektprüfungen und der Release-Build erneut erfolgreich ausgeführt. Die Hintergrundgeometrie wurde softwaregerendert und visuell kontrolliert; die Phosphor-Intensität wurde dabei reduziert. Die Vorschau enthält ergänzten Beispieltext und ist kein Screenshot der Anwendung. Grafische Bedienung, Bewegung auf einem echten Monitor und GPU-/Treiberverhalten wurden nicht praktisch geprüft.
+
+Der separate Renderer-Test wurde über eine lokale Testhülle unter work/effects-tests gegen egui 0.31.1 ausgeführt, da die vorhandene alte Vendor-Lockdatei eine offline nicht verfügbare Abhängigkeit verlangt. Die eingebettete Rendererdatei selbst enthält den Test.
+
+
+## Hintergrundbilder 0.5.0 – 19. Oktober 2026
+
+27 Hauptprüfungen einschließlich expliziter Offline-Integrationstests und Renderexport bestanden. Neue Prüfungen: PNG/JPEG/WebP/BMP-Decodierung; PNG-Transparenz; ungültige/fehlende Dateien; proportionale Texturreduktion auf 2048 Pixel; Ablehnung übergroßer Bildabmessungen; alte Einstellungen ohne Bildfelder; ungültige Abdunklungswerte; ignorierte überholte Ladeergebnisse; keine automatische Wiederholung bei Ladefehlern; Rücksetzen beim Abschalten; horizontaler/vertikaler Zuschnitt und Einpassen; Begrenzung der Zeichenoperationen auf den jeweiligen Bereich.
+
+Der native Dateidialog und die Darstellung eines echten Bildes im laufenden Terminal wurden nicht per UI-Automation geprüft. Reale SSH-/WinRM-Verbindungen bleiben wie vereinbart außerhalb der Offline-Prüfung.
+
+Der finale Release-Build 0.5.0 und alle sechs PTY-Testmodi (Shells, Ordnerübernahme, Neustart, Profile, Suche und KI-Übergabe) sind erfolgreich abgeschlossen.

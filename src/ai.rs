@@ -169,12 +169,18 @@ mod tests {
         let mut prompts = std::collections::HashSet::new();
         for action in QuickAction::ALL {
             let prompt = action.prompt(selection);
-            assert!(prompt.contains(&format!("--- Beginn der Terminalauswahl ---\n{selection}\n--- Ende der Terminalauswahl ---")));
+            assert!(prompt.contains(&format!(
+                "--- Beginn der Terminalauswahl ---\n{selection}\n--- Ende der Terminalauswahl ---"
+            )));
             assert!(prompts.insert(prompt.clone()));
             let draft = Draft::new(prompt.clone(), directory.clone(), Shell::Codex);
             let (_, args) = draft.command("tool.exe".into()).unwrap();
             assert_eq!(args, ["--", prompt.as_str()]);
-            let oversized = Draft::new(action.prompt(&"a".repeat(MAX_PROMPT_UNITS)), directory.clone(), Shell::Codex);
+            let oversized = Draft::new(
+                action.prompt(&"a".repeat(MAX_PROMPT_UNITS)),
+                directory.clone(),
+                Shell::Codex,
+            );
             assert!(oversized.command("tool.exe".into()).is_err());
         }
     }

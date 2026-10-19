@@ -14,3 +14,16 @@ Quelle: https://crates.io/crates/egui_term/0.1.0, Repository: https://github.com
 
 Die ursprüngliche MIT-Lizenz liegt unverändert unter `vendor/egui_term-0.1.0/LICENSE`.
 
+
+
+## 0.4.0: Optionale Darstellungseffekte
+
+- Neue VisualEffects-Konfiguration mit Aurora-Mesh, Phosphor-Scanlines und Sternpartikeln.
+- Cursor-Schweif und Konturleuchten vor dem Zeichnen der Terminalzellen; auf den Bereich begrenzt, mit Ablaufzeit und Rücksetzen bei Fokus-/Layout-/Scrolländerungen.
+- TerminalView::set_effects; Anpassung berücksichtigt SHOW_CURSOR und sichtbaren Scrollbereich. Animationen werden nur bei fokussiertem aktiven Terminal angefordert.
+- Tests für Trail-Grenzen und Lebenszyklus. Keine Änderung an PTY-Protokoll oder Eingabeformat.
+
+
+## 0.5.0: Hintergrundtexturen
+
+BackgroundImage und TerminalView::set_background_image zeichnen eine geteilte GPU-Textur vor Effekten und Terminalzellen. Seitenverhältnis bleibt bei mittigem Zuschnitt oder Einpassen erhalten; Abdunklung und Clipping gelten je Terminalbereich. Der Decoder und asynchrone Ladecache liegen im Hauptprogramm.

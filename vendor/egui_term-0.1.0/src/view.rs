@@ -3,12 +3,12 @@ use alacritty_terminal::term::cell;
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
 use egui::epaint::RectShape;
-use egui::{CornerRadius, Key};
-use egui::{Modifiers, Color32};
 use egui::MouseWheelUnit;
 use egui::Shape;
 use egui::Widget;
 use egui::{Align2, Painter, Pos2, Rect, Response, Stroke, Vec2};
+use egui::{Color32, Modifiers};
+use egui::{CornerRadius, Key};
 use egui::{Id, PointerButton};
 
 use crate::backend::BackendCommand;
@@ -32,11 +32,14 @@ enum InputAction {
 #[derive(Clone, Default)]
 pub struct TerminalViewState {
     is_dragged: bool,
+    trail: crate::effects::CursorTrail,
     scroll_pixels: f32,
     current_mouse_position_on_grid: TerminalGridPoint,
 }
 
 pub struct TerminalView<'a> {
+    background_image: Option<crate::effects::BackgroundImage>,
+    effects: crate::effects::VisualEffects,
     widget_id: Id,
     has_focus: bool,
     size: Vec2,
@@ -76,6 +79,8 @@ impl<'a> TerminalView<'a> {
         ));
 
         Self {
+            background_image: None,
+            effects: crate::effects::VisualEffects::default(),
             widget_id,
             has_focus: false,
             size: ui.available_size(),
@@ -87,6 +92,22 @@ impl<'a> TerminalView<'a> {
     }
 
     #[inline]
+    pub fn set_background_image(
+        mut self,
+        image: Option<crate::effects::BackgroundImage>,
+    ) -> Self {
+        self.background_image = image;
+        self
+    }
+
+    pub fn set_effects(
+        mut self,
+        effects: crate::effects::VisualEffects,
+    ) -> Self {
+        self.effects = effects;
+        self
+    }
+
     pub fn set_theme(mut self, theme: TerminalTheme) -> Self {
         self.theme = theme;
         self
@@ -150,7 +171,16 @@ impl<'a> TerminalView<'a> {
         let modifiers = layout.ctx.input(|i| i.modifiers);
         let events = layout.ctx.input(|i| i.events.clone());
         for event in events {
-            if !layout.contains_pointer() && matches!(event, egui::Event::MouseWheel { .. } | egui::Event::PointerButton { .. } | egui::Event::PointerMoved(_)) { continue; }
+            if !layout.contains_pointer()
+                && matches!(
+                    event,
+                    egui::Event::MouseWheel { .. }
+                        | egui::Event::PointerButton { .. }
+                        | egui::Event::PointerMoved(_)
+                )
+            {
+                continue;
+            }
             let mut input_actions = vec![];
 
             match event {
@@ -231,6 +261,42 @@ impl<'a> TerminalView<'a> {
         let global_bg =
             self.theme.get_color(Color::Named(NamedColor::Background));
 
+        let time = layout.ctx.input(|i| i.time);
+        let window_focused = layout.ctx.input(|i| i.focused);
+        let active = self.has_focus && window_focused;
+        let mut effects = self.effects;
+        effects.animations &= active;
+        if let Some(image) = self.background_image {
+            image.paint(painter, layout.rect);
+        }
+        effects.paint_background(painter, layout.rect, time);
+        if effects.animated() && matches!(effects.preset, 1 | 3) {
+            layout
+                .ctx
+                .request_repaint_after(std::time::Duration::from_millis(50));
+        }
+        let point = content.grid.cursor.point;
+        let line = point.line.0 + content.grid.display_offset() as i32;
+        let cursor_rect = Rect::from_min_size(
+            Pos2::new(
+                layout_min.x + point.column.0 as f32 * cell_width,
+                layout_min.y + line as f32 * cell_height,
+            ),
+            Vec2::new(cell_width, cell_height),
+        );
+        let cursor_visible =
+            content.terminal_mode.contains(TermMode::SHOW_CURSOR)
+                && layout.rect.contains_rect(cursor_rect);
+        state.trail.paint(
+            painter,
+            cursor_visible.then_some(cursor_rect),
+            layout.rect,
+            content.grid.display_offset(),
+            time,
+            effects,
+            active,
+        );
+
         let mut shapes = vec![Shape::Rect(RectShape::filled(
             Rect::from_min_max(layout_min, layout_max),
             CornerRadius::ZERO,
@@ -282,8 +348,14 @@ impl<'a> TerminalView<'a> {
             }
 
             if !is_selected {
-                if let Some(active) = self.backend.search_highlight(indexed.point) {
-                    bg = if active { Color32::from_rgb(245, 155, 45) } else { Color32::from_rgb(215, 200, 85) };
+                if let Some(active) =
+                    self.backend.search_highlight(indexed.point)
+                {
+                    bg = if active {
+                        Color32::from_rgb(245, 155, 45)
+                    } else {
+                        Color32::from_rgb(215, 200, 85)
+                    };
                     fg = Color32::BLACK;
                 }
             }
@@ -313,8 +385,12 @@ impl<'a> TerminalView<'a> {
             }
 
             // Handle cursor rendering
-            if content.grid.cursor.point == indexed.point {
-                let cursor_color = self.theme.get_color(content.cursor.fg);
+            if cursor_visible && content.grid.cursor.point == indexed.point {
+                let cursor_color = if effects.strength() > 0.0 {
+                    effects.accent()
+                } else {
+                    self.theme.get_color(content.cursor.fg)
+                };
                 shapes.push(Shape::Rect(RectShape::filled(
                     Rect::from_min_size(
                         Pos2::new(x, y),
@@ -327,8 +403,9 @@ impl<'a> TerminalView<'a> {
 
             // Draw text content
             if indexed.c != ' ' && indexed.c != '\t' {
-                if content.grid.cursor.point == indexed.point
-                    && is_app_cursor_mode
+                if cursor_visible
+                    && content.grid.cursor.point == indexed.point
+                    && (is_app_cursor_mode || effects.strength() > 0.0)
                 {
                     std::mem::swap(&mut fg, &mut bg);
                 }

@@ -200,11 +200,13 @@ mod tests {
                     axis: Axis::Columns,
                     ratio: 0.35,
                     first: Box::new(Node::Pane(Pane {
+                        remote: None,
                         id: 1,
                         shell: Shell::PowerShell,
                         directory: root.into(),
                     })),
                     second: Box::new(Node::Pane(Pane {
+                        remote: None,
                         id: 2,
                         shell: Shell::Codex,
                         directory: root.join("src"),
@@ -260,6 +262,7 @@ mod tests {
             .map(|id| Tab {
                 name: "Tab".into(),
                 root: Node::Pane(Pane {
+                    remote: None,
                     id,
                     shell: Shell::Cmd,
                     directory: root.clone(),

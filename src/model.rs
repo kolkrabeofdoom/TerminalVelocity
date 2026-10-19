@@ -244,6 +244,8 @@ pub enum Axis {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Pane {
+    #[serde(default)]
+    pub remote: Option<crate::remote::Connection>,
     pub id: u64,
     pub shell: Shell,
     pub directory: PathBuf,
@@ -329,6 +331,10 @@ pub struct Tab {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Workspace {
+    pub background: crate::background::Settings,
+    pub effects: crate::effects::Settings,
+    pub connections: Vec<crate::remote::Connection>,
+    pub ssh_path: String,
     pub version: u32,
     pub opacity: f32,
     pub acrylic: bool,
@@ -345,6 +351,10 @@ impl Default for Workspace {
     fn default() -> Self {
         Self {
             version: 1,
+            background: crate::background::Settings::default(),
+            effects: crate::effects::Settings::default(),
+            connections: vec![],
+            ssh_path: String::new(),
             opacity: 0.82,
             acrylic: false,
             compatibility_transparency: true,
@@ -360,6 +370,13 @@ impl Default for Workspace {
 
 impl Workspace {
     pub fn update_directory(&mut self, id: u64, title: &str) -> bool {
+        let Some(pane) = self.tabs.iter_mut().find_map(|tab| tab.root.pane_mut(id)) else {
+            return false;
+        };
+        // Remote output must never cause local filesystem probes (including UNC paths).
+        if pane.remote.is_some() {
+            return false;
+        }
         let Some(path) = title.strip_prefix("RUST_TERMINAL_CWD:") else {
             return false;
         };
@@ -367,13 +384,8 @@ impl Workspace {
         if !path.is_absolute() || !path.is_dir() {
             return false;
         }
-        for tab in &mut self.tabs {
-            if let Some(pane) = tab.root.pane_mut(id) {
-                pane.directory = path;
-                return true;
-            }
-        }
-        false
+        pane.directory = path;
+        true
     }
     pub fn inherited_directory(&self, focused: u64, fallback: &std::path::Path) -> PathBuf {
         self.panes()
@@ -383,6 +395,18 @@ impl Workspace {
             .unwrap_or_else(|| fallback.to_path_buf())
     }
     pub fn validate(&mut self) -> Result<(), String> {
+        self.effects.validate();
+        self.background.validate();
+        if self.connections.len() > 128 {
+            return Err("Maximal 128 gespeicherte Verbindungen.".into());
+        }
+        let mut names = std::collections::HashSet::new();
+        for connection in &self.connections {
+            connection.validate()?;
+            if !names.insert(connection.name.trim().to_lowercase()) {
+                return Err("Verbindungsname bereits vorhanden.".into());
+            }
+        }
         self.shell_paths.resize(Shell::ALL.len(), String::new());
         if self.version != 1 {
             return Err("Unbekannte Workspace-Version".into());
@@ -401,6 +425,9 @@ impl Workspace {
             }
             match node {
                 Node::Pane(p) => {
+                    if let Some(remote) = &p.remote {
+                        remote.validate()?;
+                    }
                     if !ids.insert(p.id) || p.id > 1_000_000 || ids.len() > 64 {
                         return Err("Ungültige oder zu viele Bereiche".into());
                     }
@@ -513,11 +540,13 @@ mod tests {
                 axis: Axis::Columns,
                 ratio: 0.5,
                 first: Box::new(Node::Pane(Pane {
+                    remote: None,
                     id: 11,
                     shell: Shell::PowerShell,
                     directory: base.clone(),
                 })),
                 second: Box::new(Node::Pane(Pane {
+                    remote: None,
                     id: 12,
                     shell: Shell::Cmd,
                     directory: base.clone(),
@@ -544,6 +573,7 @@ mod tests {
     }
     fn pane(id: u64) -> Pane {
         Pane {
+            remote: None,
             id,
             shell: Shell::PowerShell,
             directory: PathBuf::from("."),
