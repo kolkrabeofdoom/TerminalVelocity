@@ -1085,7 +1085,7 @@ impl eframe::App for TerminalApp {
                         self.remote_dialog = Some(remote::Dialog::default());
                     }
                     ui.label(
-                        egui::RichText::new("0.5.0 · HINTERGRUNDBILDER")
+                        egui::RichText::new(env!("CARGO_PKG_VERSION"))
                             .small()
                             .color(Color32::from_rgb(100, 210, 190)),
                     );
@@ -1483,9 +1483,9 @@ fn smoke_test() -> Result<(), Box<dyn std::error::Error>> {
         )?;
         let deadline = Instant::now() + Duration::from_secs(25);
         let command = match shell {
-            Shell::PowerShell => "codex --version; Write-Output ('RUST_' + 'TERMINAL_OK')\r",
-            Shell::Cmd => "set RT=RUST_\r\necho %RT%TERMINAL_OK\r\n",
-            Shell::GitBash => "printf 'RUST_%s\\n' TERMINAL_OK\r",
+            Shell::PowerShell => "codex --version; Write-Output ('TERMINALVELOCITY_' + 'OK')\r",
+            Shell::Cmd => "set TV=TERMINALVELOCITY_\r\necho %TV%OK\r\n",
+            Shell::GitBash => "printf 'TERMINALVELOCITY_%s\\n' OK\r",
             _ => "",
         };
         backend.process_command(egui_term::BackendCommand::Write(
@@ -1495,7 +1495,7 @@ fn smoke_test() -> Result<(), Box<dyn std::error::Error>> {
         while Instant::now() < deadline {
             let content = backend.sync();
             let text: String = content.grid.display_iter().map(|c| c.c).collect();
-            if (text.contains("RUST_TERMINAL_OK")
+            if (text.contains("TERMINALVELOCITY_OK")
                 && (shell != Shell::PowerShell || text.contains("codex-cli ")))
                 || expected_version
                     .as_ref()
@@ -1536,7 +1536,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                 receiver.recv_timeout(Duration::from_millis(50))
             {
                 if title
-                    .strip_prefix("RUST_TERMINAL_CWD:")
+                    .strip_prefix("TERMINALVELOCITY_CWD:")
                     .is_some_and(|path| {
                         PathBuf::from(path)
                             .canonicalize()
@@ -1556,8 +1556,10 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
         ))
     }
     let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
-    let test_root =
-        std::env::temp_dir().join(format!("RustTerminal cwd O'Brien ü {}", std::process::id()));
+    let test_root = std::env::temp_dir().join(format!(
+        "TerminalVelocity cwd O'Brien ü {}",
+        std::process::id()
+    ));
     std::fs::create_dir(&test_root)?;
     let result = (|| -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut report = vec![];
@@ -1686,7 +1688,8 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             .process_command(egui_term::BackendCommand::Write(text.as_bytes().to_vec()));
     }
     let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
-    let root = std::env::temp_dir().join(format!("RustTerminal restart ü {}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("TerminalVelocity restart ü {}", std::process::id()));
     std::fs::create_dir(&root)?;
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         let mut workspace = Workspace::default();
@@ -1776,7 +1779,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             &mut app.workspace,
             &mut app.sessions,
             old_generation,
-            PtyEvent::Title(format!("RUST_TERMINAL_CWD:{}", base.display())),
+            PtyEvent::Title(format!("TERMINALVELOCITY_CWD:{}", base.display())),
         );
         if app.sessions[&1].exited
             || app
@@ -1858,7 +1861,7 @@ fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
         ))
     }
     let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
-    let root = std::env::temp_dir().join(format!("RustTerminal KI ü {}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("TerminalVelocity KI ü {}", std::process::id()));
     std::fs::create_dir(&root)?;
     let probe = root.join("prompt-probe.exe");
     std::fs::copy(base.join("prompt-probe.exe"), &probe)?;
@@ -2008,7 +2011,8 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
-    let root = std::env::temp_dir().join(format!("RustTerminal Profile ü {}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("TerminalVelocity Profile ü {}", std::process::id()));
     std::fs::create_dir(&root)?;
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         let old = root.join("original");
@@ -2125,7 +2129,7 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
             .file_name()
             .unwrap()
             .to_string_lossy()
-            .starts_with("RustTerminal Profile ü ")
+            .starts_with("TerminalVelocity Profile ü ")
     {
         return Err("Unerwarteter Testordner; Aufräumen abgebrochen".into());
     }
@@ -2331,7 +2335,7 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     eframe::run_native(
-        "TerminalVelocity · 0.5.0 · Hintergrundbilder",
+        concat!("TerminalVelocity · ", env!("CARGO_PKG_VERSION")),
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([1200.0, 760.0])

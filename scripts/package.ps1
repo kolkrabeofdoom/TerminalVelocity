@@ -6,12 +6,12 @@ $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 $manifest = Get-Content -LiteralPath (Join-Path $projectRoot 'Cargo.toml') -Raw
 $version = [regex]::Match($manifest, '(?m)^version = "([^"]+)"').Groups[1].Value
 if (-not $version) { throw 'Package version missing' }
-$packageRoot = Join-Path $OutputDirectory 'RustTerminal'
+$packageRoot = Join-Path $OutputDirectory 'TerminalVelocity'
 $zip = Join-Path $OutputDirectory "TerminalVelocity-$version-Windows-x64.zip"
 if ((Test-Path -LiteralPath $packageRoot) -or (Test-Path -LiteralPath $zip)) { throw 'Output already exists. Choose a fresh -OutputDirectory.' }
 if (-not $SkipBuild) { & (Join-Path $PSScriptRoot 'build.ps1') }
 $targetRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $projectRoot 'target' }
-$executable = Join-Path $targetRoot 'release/rust-terminal.exe'
+$executable = Join-Path $targetRoot 'release/TerminalVelocity.exe'
 if (-not (Test-Path -LiteralPath $executable)) { throw "Release executable missing: $executable" }
 $source = Get-Content -LiteralPath (Join-Path $projectRoot 'shells/powershell-source.json') -Raw | ConvertFrom-Json
 $cacheRoot = Join-Path $projectRoot 'work/downloads'
@@ -25,11 +25,11 @@ if (-not $validCache) {
     Move-Item -LiteralPath $download -Destination $archive -Force
 }
 New-Item -ItemType Directory -Path (Join-Path $packageRoot 'shells/powershell') -Force | Out-Null
-Copy-Item -LiteralPath $executable -Destination (Join-Path $packageRoot 'RustTerminal.exe')
+Copy-Item -LiteralPath $executable -Destination (Join-Path $packageRoot 'TerminalVelocity.exe')
 foreach ($name in @('README.md','LICENSE','VERIFICATION.md','VENDOR_CHANGES.md','THIRD_PARTY_LICENSES.txt','CHANGELOG.md')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $name) -Destination $packageRoot
 }
-foreach ($name in @('rust-terminal.bash','powershell-source.json')) {
+foreach ($name in @('terminalvelocity.bash','powershell-source.json')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot "shells/$name") -Destination (Join-Path $packageRoot "shells/$name")
 }
 Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $packageRoot 'shells/powershell')
@@ -58,7 +58,7 @@ try {
     $zipArchive = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Create, $true)
     try {
         Get-ChildItem -LiteralPath $packageRoot -File -Recurse | Sort-Object FullName | ForEach-Object {
-            $entryName = 'RustTerminal/' + [IO.Path]::GetRelativePath($packageRoot, $_.FullName).Replace('\','/')
+            $entryName = 'TerminalVelocity/' + [IO.Path]::GetRelativePath($packageRoot, $_.FullName).Replace('\','/')
             $entry = $zipArchive.CreateEntry($entryName, [IO.Compression.CompressionLevel]::Optimal)
             $entry.LastWriteTime = [DateTimeOffset]::new(2000,1,1,0,0,0,[TimeSpan]::Zero)
             $destination = $entry.Open()

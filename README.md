@@ -1,6 +1,6 @@
-# Rust Terminal
+# TerminalVelocity
 
-Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.5.0**.
+Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.5.1**.
 
 ## Funktionen
 
@@ -26,7 +26,7 @@ cargo test --locked
 cargo build --release --locked
 ```
 
-Alternativ: `./scripts/build.ps1` (kopiert auch das für Git Bash benötigte Startskript neben die EXE). Das ausführbare Programm liegt anschließend unter `target/release/rust-terminal.exe`.
+Alternativ: `./scripts/build.ps1` (kopiert auch das für Git Bash benötigte Startskript neben die EXE). Das ausführbare Programm liegt anschließend unter `target/release/TerminalVelocity.exe`.
 
 PowerShell 7 muss im PATH, unter `C:\Program Files\PowerShell\7` oder portabel unter `shells/powershell/pwsh.exe` neben der EXE liegen. Die ältere Windows PowerShell 5.1 wird nicht als Ersatz verwendet. Unter **Einstellungen → Shells und KI-CLIs** können EXE- und CMD-Pfade explizit angegeben werden; relative Pfade gelten zum Programmordner.
 
@@ -36,7 +36,7 @@ PowerShell 7 muss im PATH, unter `C:\Program Files\PowerShell\7` oder portabel u
 ./scripts/package.ps1
 ```
 
-Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/TerminalVelocity-0.5.0-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
+Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/TerminalVelocity-0.5.1-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
 
 Dieses Repository enthält die Quellen und die angepasste Terminalbibliothek. Kompilate, heruntergeladene Laufzeiten, Zugangsdaten, lokale Einstellungen und Testausgaben sind ausgeschlossen.
 
@@ -143,11 +143,11 @@ GitHub Actions führt bei Pushes auf `main`, bei Pull Requests und auf manuellen
 `cargo test --locked` prüft unter anderem Workspace-Kompatibilität, Ordnerübernahme bei Fokuswechsel, Teilungen, Anbieterpfade und den nativen Codex-Start. Die gebaute EXE bietet weitere lokale Tests:
 
 ```powershell
-./dist/RustTerminal/RustTerminal.exe --smoke-test
-./dist/RustTerminal/RustTerminal.exe --directory-test
-./dist/RustTerminal/RustTerminal.exe --restart-test
-./dist/RustTerminal/RustTerminal.exe --profile-test
-./dist/RustTerminal/RustTerminal.exe --search-test
+./dist/TerminalVelocity/TerminalVelocity.exe --smoke-test
+./dist/TerminalVelocity/TerminalVelocity.exe --directory-test
+./dist/TerminalVelocity/TerminalVelocity.exe --restart-test
+./dist/TerminalVelocity/TerminalVelocity.exe --profile-test
+./dist/TerminalVelocity/TerminalVelocity.exe --search-test
 ```
 
 Dabei werden Berichte neben der EXE erzeugt. Die Verzeichnis- und Neustarttests verwenden echte Windows-Pseudoterminals. Details und bekannte Grenzen stehen in [VERIFICATION.md](VERIFICATION.md).

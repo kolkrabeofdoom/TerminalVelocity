@@ -164,7 +164,7 @@ impl Shell {
                     codex.to_string_lossy().replace('\'', "''")
                 ));
             }
-            script.push_str(" $global:RustTerminalSavedPrompt = $function:prompt; function global:prompt { if ($PWD.Provider.Name -eq 'FileSystem') { [Console]::Write(([char]27).ToString() + ']0;RUST_TERMINAL_CWD:' + $PWD.ProviderPath + [char]7) }; if ($global:RustTerminalSavedPrompt) { & $global:RustTerminalSavedPrompt } else { 'PS ' + $PWD.Path + '> ' } };");
+            script.push_str(" $global:TerminalVelocitySavedPrompt = $function:prompt; function global:prompt { if ($PWD.Provider.Name -eq 'FileSystem') { [Console]::Write(([char]27).ToString() + ']0;TERMINALVELOCITY_CWD:' + $PWD.ProviderPath + [char]7) }; if ($global:TerminalVelocitySavedPrompt) { & $global:TerminalVelocitySavedPrompt } else { 'PS ' + $PWD.Path + '> ' } };");
             return Ok((
                 executable,
                 vec![
@@ -181,7 +181,7 @@ impl Shell {
                 vec![
                     "/D".into(),
                     "/K".into(),
-                    "prompt $E]0;RUST_TERMINAL_CWD:$P$E\\$P$G".into(),
+                    "prompt $E]0;TERMINALVELOCITY_CWD:$P$E\\$P$G".into(),
                 ],
             ));
         }
@@ -191,7 +191,7 @@ impl Shell {
                 vec![
                     "--rcfile".into(),
                     app_dir
-                        .join("shells/rust-terminal.bash")
+                        .join("shells/terminalvelocity.bash")
                         .to_string_lossy()
                         .into_owned(),
                     "-i".into(),
@@ -377,7 +377,7 @@ impl Workspace {
         if pane.remote.is_some() {
             return false;
         }
-        let Some(path) = title.strip_prefix("RUST_TERMINAL_CWD:") else {
+        let Some(path) = title.strip_prefix("TERMINALVELOCITY_CWD:") else {
             return false;
         };
         let path = PathBuf::from(path);
@@ -553,9 +553,8 @@ mod tests {
                 })),
             },
         });
-        assert!(
-            workspace.update_directory(12, &format!("RUST_TERMINAL_CWD:{}", alternate.display()))
-        );
+        assert!(workspace
+            .update_directory(12, &format!("TERMINALVELOCITY_CWD:{}", alternate.display())));
         assert_eq!(
             workspace.inherited_directory(12, std::path::Path::new("fallback")),
             alternate
@@ -565,7 +564,7 @@ mod tests {
             base
         );
         assert!(!workspace.update_directory(12, "normal window title"));
-        assert!(!workspace.update_directory(12, "RUST_TERMINAL_CWD:relative"));
+        assert!(!workspace.update_directory(12, "TERMINALVELOCITY_CWD:relative"));
         assert_eq!(
             workspace.inherited_directory(99, std::path::Path::new("fallback")),
             PathBuf::from("fallback")

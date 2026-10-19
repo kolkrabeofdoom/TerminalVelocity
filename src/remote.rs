@@ -269,7 +269,7 @@ mod tests {
         });
         assert!(!workspace.update_directory(
             1,
-            &format!("RUST_TERMINAL_CWD:{}", base.join("src").display())
+            &format!("TERMINALVELOCITY_CWD:{}", base.join("src").display())
         ));
         assert_eq!(workspace.inherited_directory(1, Path::new("missing")), base);
         let encoded = serde_json::to_vec(&workspace).unwrap();

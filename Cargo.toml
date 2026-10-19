@@ -1,9 +1,13 @@
 [package]
-name = "rust-terminal"
-version = "0.5.0"
+name = "terminalvelocity"
+version = "0.5.1"
 edition = "2021"
 license = "MIT"
 description = "Portable Windows terminal prototype"
+
+[[bin]]
+name = "TerminalVelocity"
+path = "src/main.rs"
 
 [features]
 test-tools = []

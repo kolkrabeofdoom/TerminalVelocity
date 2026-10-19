@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.5.1 – 19. Oktober 2026
+
+- Einheitlicher Projektname TerminalVelocity in Dokumentation, EXE, Paketordner, Build- und CI-Skripten sowie Shell-Integration. Das Cargo-Paket heißt `terminalvelocity`, die Anwendung `TerminalVelocity.exe`.
+- Das Git-Bash-Startskript heißt jetzt `shells/terminalvelocity.bash`; interne Prompt-Kennungen verwenden `TERMINALVELOCITY_CWD`.
+- Bestehende `workspace.json` und `profiles.json` bleiben lesbar. Beim Umzug in einen neuen Programmordner diese beiden Dateien übernehmen; relative Hintergrundbild- und Programmpfade beziehen sich weiterhin auf den Programmordner.
+- Automatische Windows-Prüfungen für Pushes und Pull Requests.
+
 ## 0.5.0 – 19. Oktober 2026
 
 Erster gemeinsam gesicherter Release-Stand nach 0.2.1.

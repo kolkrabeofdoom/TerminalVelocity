@@ -13,7 +13,7 @@ try {
     & (Join-Path $PSScriptRoot 'build.ps1') -SkipTests
 
     $targetRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $projectRoot 'target' }
-    $executable = Join-Path $targetRoot 'release/rust-terminal.exe'
+    $executable = Join-Path $targetRoot 'release/TerminalVelocity.exe'
     foreach ($mode in @('--directory-test', '--restart-test', '--profile-test', '--search-test')) {
         Write-Host "Running $mode"
         $process = Start-Process -FilePath $executable -ArgumentList $mode -WindowStyle Hidden -PassThru

@@ -32,7 +32,7 @@ Windows x64, Rust Stable/MSVC. 17 reguläre Tests und drei explizit aktivierte O
 
 Neu geprüft: sichere SSH-Argumenttrennung und Hostvalidierung; OpenSSH-Konfigurationsauswertung mit Hostalias, Konto, Port und ProxyJump über `ssh -G` ohne Verbindung; PowerShell-Parser mit Sonderzeichen in Konto/Endpunkt und ersetzten Netzwerk-/Anmelde-Cmdlets; Ende des WinRM-Hostprozesses nach simulierter Sitzungsrückkehr über eine echte Windows-PTY. Der letzte Test deckte einen zunächst verbleibenden lokalen Prompt auf; der finale lokale Prompt beendet nun explizit den Hostprozess. Ebenfalls geprüft: alte Pane-Daten ohne Remote-Feld, Roundtrip von Remote-Layouts, Projektprofil-Übernahme mit neuen IDs, unabhängige Profilkopien und Ausschluss von Remote-Titeln bei lokalen Ordneränderungen.
 
-Git Bash: Start und Ordnerübernahme wurden inzwischen praktisch über PTYs geprüft (inklusive Leerzeichen, Apostroph und Unicode). Beim direkten Cargo-Build muss shells/rust-terminal.bash neben der EXE liegen; scripts/build.ps1 liefert es nun ebenfalls mit.
+Git Bash: Start und Ordnerübernahme wurden inzwischen praktisch über PTYs geprüft (inklusive Leerzeichen, Apostroph und Unicode). Beim direkten Cargo-Build muss shells/terminalvelocity.bash neben der EXE liegen; scripts/build.ps1 liefert es nun ebenfalls mit.
 
 Echte SSH-/WinRM-Anmeldungen wurden auf Wunsch ausschließlich durch Offline-Tests ersetzt; keine Serververbindung oder KI-Anfrage. Grafische Klickpfade der Remote-Dialoge wurden nicht automatisiert geprüft. Die Computer-Use-Anleitung untersagt Terminal-App-Automatisierung. Authentifizierung, erreichbare Server, Zertifikate und reale Remote-Abbrüche bleiben praktisch ungeprüft.
 
@@ -55,3 +55,7 @@ Der separate Renderer-Test wurde über eine lokale Testhülle unter work/effects
 Der native Dateidialog und die Darstellung eines echten Bildes im laufenden Terminal wurden nicht per UI-Automation geprüft. Reale SSH-/WinRM-Verbindungen bleiben wie vereinbart außerhalb der Offline-Prüfung.
 
 Der finale Release-Build 0.5.0 und alle sechs PTY-Testmodi (Shells, Ordnerübernahme, Neustart, Profile, Suche und KI-Übergabe) sind erfolgreich abgeschlossen.
+
+## Einheitlicher Projektname 0.5.1 – 19. Oktober 2026
+
+Formatierung, alle 27 Hauptprüfungen einschließlich Offline-Remote-Tests, Release-Build und die vier PTY-Prüfungen (Ordner, Neustart, Profile, Suche) erfolgreich. Die umbenannte TerminalVelocity.exe besteht auch den Shelltest für PowerShell, CMD, Git Bash, Codex und Gemini; Claude und OpenAI API CLI sind lokal nicht installiert. Neue Prompt-Kennungen und der neue Git-Bash-Skriptpfad werden durch die Ordnerprüfungen erfasst. Keine echten Remote-Verbindungen oder KI-Anfragen.
