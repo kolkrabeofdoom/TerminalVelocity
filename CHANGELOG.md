@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.7.0 – 20. Oktober 2026
+
+- Schlanker lokaler Editor als eigener Tab: Öffnen, Neu, Speichern/Speichern unter, Zeilennummern, Einrückung, Undo/Redo und Suche.
+- Einfache Syntaxfarben für PowerShell, Bash, JSON, TOML und Markdown, ohne zusätzliche Laufzeit.
+- UTF-8/BOM und LF/CRLF erhalten; Konfliktprüfung vor atomarem Speichern und Bestätigung für ungespeicherte Änderungen, auch beim Beenden.
+- Begrenzung auf 256 KiB und ein Dokument zur Zeit; keine Ausführung oder Remote-Bearbeitung.
+
 ## 0.6.0 – 19. Oktober 2026
 
 - Einstellbares Text-Nachleuchten für neue und geänderte Zeichen im Phosphor-Modus, mit Leuchtstärke und Dauer.

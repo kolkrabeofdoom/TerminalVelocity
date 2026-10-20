@@ -1,6 +1,6 @@
 # TerminalVelocity
 
-Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.6.0**.
+Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.7.0**.
 
 ## Funktionen
 
@@ -36,7 +36,7 @@ PowerShell 7 muss im PATH, unter `C:\Program Files\PowerShell\7` oder portabel u
 ./scripts/package.ps1
 ```
 
-Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/TerminalVelocity-0.6.0-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
+Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/TerminalVelocity-0.7.0-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
 
 Dieses Repository enthält die Quellen und die angepasste Terminalbibliothek. Kompilate, heruntergeladene Laufzeiten, Zugangsdaten, lokale Einstellungen und Testausgaben sind ausgeschlossen.
 
@@ -177,3 +177,16 @@ Versionsänderungen stehen in [CHANGELOG.md](CHANGELOG.md).
 Unter **Einstellungen → Grafikeffekte → Phosphor** lassen sich **Text-Nachleuchten**, **Leuchtstärke** und **Nachleuchtdauer** einstellen. Neue und veränderte Zeichen erhalten einen abklingenden grünen oder bernsteinfarbenen Lichtsaum hinter der normalen Schrift. Standard: 50 % Leuchtstärke und 0,6 Sekunden; Dauer einstellbar von 0,1 bis 1,5 Sekunden. Die globale Effektstärke wirkt zusätzlich.
 
 Gelöschte Zeichen hinterlassen keine Textreste. Ohne Animationen, bei Fokusverlust, in anderen Presets oder bei Stärke null ist der Effekt aus. Bei Auswahl oder Suchtreffern wird er unterdrückt. Scrollposition, Scrollback-Wachstum, Schrift-/Layoutänderungen und Wechsel des alternativen Bildschirms setzen ihn zurück. Maximal 512 Zeichen leuchten gleichzeitig, Ansichten mit mehr als 8192 sichtbaren Textzeichen verzichten auf Nachleuchten. Während des Abklingens werden höchstens 20 zusätzliche Neuzeichnungen pro Sekunde angefordert. Alte Workspace-Dateien bleiben lesbar.
+
+## Eingebauter Editor (0.7.0)
+
+**Editor** in der Werkzeugleiste öffnet einen eigenen Tab für ein lokales Dokument. Terminal-Tabs laufen weiter. **Neu**, **Öffnen …**, **Speichern** und **Speichern unter …** stehen im Editor bereit. Der Dateidialog startet im lokalen Ordner des aktiven Terminalbereichs; Remote-Pfade werden nicht als lokale Dateien verwendet.
+
+- Zeilennummern, horizontales/vertikales Scrollen und einfache Syntaxfarben für PowerShell, Bash, JSON, TOML und Markdown anhand der Dateiendung.
+- **Strg+S** speichert die Datei, **Strg+Umschalt+S** öffnet „Speichern unter“. **Strg+Z** macht Änderungen rückgängig; **Strg+Umschalt+Z** oder **Strg+Y** stellt sie wieder her. **Tab** rückt ein, **Umschalt+Tab** entfernt Einrückung an der Cursorposition.
+- **Strg+F** öffnet eine wörtliche, groß-/kleinschreibungssensitive Suche. „Nächster Treffer“ markiert und zeigt den Treffer; nach dem letzten beginnt die Suche wieder vorne.
+- Ein Stern am Dokumentnamen markiert ungespeicherte Änderungen. Beim Ersetzen/Schließen des Dokuments und beim normalen Beenden der Anwendung stehen Speichern, Verwerfen und Abbrechen zur Wahl. Ein Wechsel zum Terminal erhält den Entwurf im Arbeitsspeicher.
+- UTF-8 mit oder ohne BOM sowie einheitliche LF-/CRLF-Zeilenenden bleiben beim Speichern erhalten. Neue Dateien verwenden UTF-8 ohne BOM mit LF. Andere Kodierungen, Binärdateien und gemischte Zeilenenden werden mit Hinweis abgewiesen.
+- Maximal 256 KiB pro Datei. Speichern erfolgt über eine temporäre Datei im Zielordner und atomaren Austausch. Änderungen am Dateiinhalt außerhalb des Editors, gelöschte Quelldateien und Schreibschutz stoppen das Speichern. Bei einem Konflikt kann der eigene Entwurf unter einem anderen Namen gespeichert oder die externe Datei erneut geöffnet werden.
+
+Der Editor führt keine Skripte aus und lädt keine Dateien auf Server hoch. Er enthält weder Sprachserver noch Markdown-Vorschau. Entwürfe und Undo-Verlauf werden nicht im Workspace gespeichert; bei einem erzwungenen Prozessabbruch besteht keine Wiederherstellung. Der Button **Workspace speichern** speichert weiterhin nur das Terminal-Layout.

@@ -2,6 +2,7 @@
 
 mod ai;
 mod background;
+mod editor;
 mod effects;
 mod model;
 mod profiles;
@@ -99,6 +100,7 @@ fn set_window_opacity(
 }
 
 struct TerminalApp {
+    editor: editor::Editor,
     background_cache: background::Cache,
     workspace: Workspace,
     sessions: HashMap<u64, Session>,
@@ -175,6 +177,7 @@ impl TerminalApp {
             .display()
             .to_string();
         let mut app = Self {
+            editor: editor::Editor::default(),
             background_cache: background::Cache::default(),
             workspace,
             sessions: HashMap::new(),
@@ -379,6 +382,7 @@ impl TerminalApp {
             return;
         }
         let pane = self.new_pane();
+        self.editor.active = false;
         self.start(ctx, &pane);
         self.focused = pane.id;
         self.workspace.tabs.push(Tab {
@@ -389,6 +393,9 @@ impl TerminalApp {
     }
 
     fn split(&mut self, ctx: &egui::Context, axis: Axis) {
+        if self.editor.active {
+            return;
+        }
         if self.sessions.len() >= 64 {
             self.status = "Maximal 64 Bereiche".into();
             return;
@@ -403,6 +410,7 @@ impl TerminalApp {
     }
 
     fn focus_first(&mut self) {
+        self.editor.active = false;
         let mut panes = vec![];
         if let Some(tab) = self.workspace.tabs.get(self.workspace.active_tab) {
             tab.root.panes(&mut panes);
@@ -495,6 +503,10 @@ impl TerminalApp {
     }
 
     fn show_search(&mut self) {
+        if self.editor.active {
+            self.editor.start_search();
+            return;
+        }
         if let Some(search) = &mut self.search {
             search.focus_input = true;
         } else if self
@@ -1003,12 +1015,18 @@ impl eframe::App for TerminalApp {
         while let Ok((id, event)) = self.receiver.try_recv() {
             handle_session_event(&mut self.workspace, &mut self.sessions, id, event);
         }
+        self.editor.guard_exit(ctx);
+        let editor_base = self
+            .workspace
+            .inherited_directory(self.focused, std::path::Path::new(&self.directory));
         let shortcuts = Modifiers {
             ctrl: true,
             shift: true,
             ..Modifiers::NONE
         };
-        if !self.settings
+        if !self.editor.active
+            && !self.editor.blocked()
+            && !self.settings
             && self.profile_dialog.is_none()
             && self.remote_dialog.is_none()
             && self.ai_draft.is_none()
@@ -1018,7 +1036,9 @@ impl eframe::App for TerminalApp {
         {
             self.show_search();
         }
-        if !self.settings
+        if !self.editor.active
+            && !self.editor.blocked()
+            && !self.settings
             && self.close_target.is_none()
             && self.restart_target.is_none()
             && self.ai_draft.is_none()
@@ -1065,12 +1085,19 @@ impl eframe::App for TerminalApp {
         egui::TopBottomPanel::top("toolbar")
             .frame(egui::Frame::NONE.fill(background).inner_margin(6.0))
             .show(ctx, |ui| {
-                if self.profile_dialog.is_some() || self.remote_dialog.is_some() {
+                if self.editor.blocked()
+                    || self.profile_dialog.is_some()
+                    || self.remote_dialog.is_some()
+                {
                     ui.disable();
                 }
                 ui.add_space(5.0);
                 ui.horizontal_wrapped(|ui| {
                     ui.strong("TERMINALVELOCITY");
+                    if ui.button("Editor").clicked() {
+                        self.close_search();
+                        self.editor.activate();
+                    }
                     if ui
                         .add_enabled(
                             !self.settings
@@ -1109,21 +1136,21 @@ impl eframe::App for TerminalApp {
                         self.add_tab(ctx);
                     }
                     if ui
-                        .button("Nebeneinander")
+                        .add_enabled(!self.editor.active, egui::Button::new("Nebeneinander"))
                         .on_hover_text("Vertikale Trennlinie · Strg+Umschalt+D")
                         .clicked()
                     {
                         self.split(ctx, Axis::Columns);
                     }
                     if ui
-                        .button("Untereinander")
+                        .add_enabled(!self.editor.active, egui::Button::new("Untereinander"))
                         .on_hover_text("Horizontale Trennlinie · Strg+Umschalt+E")
                         .clicked()
                     {
                         self.split(ctx, Axis::Rows);
                     }
                     if ui
-                        .button("Speichern")
+                        .button("Workspace speichern")
                         .on_hover_text("Strg+Umschalt+S")
                         .clicked()
                     {
@@ -1175,7 +1202,7 @@ impl eframe::App for TerminalApp {
                     for (index, tab) in self.workspace.tabs.iter().enumerate() {
                         if ui
                             .selectable_label(
-                                index == self.workspace.active_tab,
+                                !self.editor.active && index == self.workspace.active_tab,
                                 format!("{}  {}", index + 1, tab.name),
                             )
                             .clicked()
@@ -1183,7 +1210,16 @@ impl eframe::App for TerminalApp {
                             selected = Some(index);
                         }
                     }
+                    if self.editor.visible
+                        && ui
+                            .selectable_label(self.editor.active, self.editor.title())
+                            .clicked()
+                    {
+                        self.close_search();
+                        self.editor.active = true;
+                    }
                     if let Some(index) = selected {
+                        self.editor.active = false;
                         self.workspace.active_tab = index;
                         self.focus_first();
                     }
@@ -1204,6 +1240,16 @@ impl eframe::App for TerminalApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(background).inner_margin(8.0))
             .show(ctx, |ui| {
+                if self.editor.active {
+                    let enabled = !self.settings
+                        && self.ai_draft.is_none()
+                        && self.profile_dialog.is_none()
+                        && self.remote_dialog.is_none()
+                        && self.close_target.is_none()
+                        && self.restart_target.is_none();
+                    self.editor.ui(ui, dialog_owner, &editor_base, enabled);
+                    return;
+                }
                 let rect = ui.available_rect_before_wrap();
                 if let Some(tab) = self.workspace.tabs.get_mut(self.workspace.active_tab) {
                     let enabled = !self.settings
@@ -1212,7 +1258,8 @@ impl eframe::App for TerminalApp {
                         && self.ai_draft.is_none()
                         && self.profile_dialog.is_none()
                         && self.remote_dialog.is_none()
-                        && self.search.is_none();
+                        && self.search.is_none()
+                        && !self.editor.blocked();
                     draw_node(
                         ui,
                         rect,
@@ -1235,6 +1282,7 @@ impl eframe::App for TerminalApp {
             }
             self.ai_draft = Some(draft);
         }
+        self.editor.confirmation(ctx, dialog_owner, &editor_base);
         self.profile_window(ctx);
         self.remote_window(ctx);
         let mut submit = false;
@@ -1714,6 +1762,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
         }];
         let (sender, receiver) = mpsc::channel();
         let mut app = TerminalApp {
+            editor: editor::Editor::default(),
             background_cache: background::Cache::default(),
             workspace,
             sessions: HashMap::new(),
@@ -2045,6 +2094,7 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
         let profile = profiles::Profile::capture("Testprojekt", old, &workspace)?;
         let (sender, receiver) = mpsc::channel();
         let mut app = TerminalApp {
+            editor: editor::Editor::default(),
             background_cache: background::Cache::default(),
             workspace,
             sessions: HashMap::new(),

@@ -63,3 +63,8 @@ Formatierung, alle 27 Hauptprüfungen einschließlich Offline-Remote-Tests, Rele
 ## Text-Nachleuchten 0.6.0 – 19. Oktober 2026
 
 28 Haupttests und drei Renderer-Tests bestanden. Neu geprüft: alte Einstellungsdateien, ungültige Stärke/Dauer, Speicherung, Änderungserkennung auch nach Leerlauf, Ablauf ohne Auffrischen bei stabilem Text, sofortiges Löschen, Grenzen für Glyphen und Lichtpunkte, Rücksetzen bei Layout/Schrift/Scrollback/Scrollposition/Alternativbildschirm sowie Clipping und Ende der Zeichenoperationen nach Ablauf. Release-Build und die vier PTY-Prüfungen (Ordner, Neustart, Profile, Suche) erfolgreich. Keine echten Remote-Verbindungen. Die Bewegung und Wirkung auf einem realen Monitor sind noch nicht visuell bestätigt.
+## Lokaler Editor 0.7.0 – 20. Oktober 2026
+
+37 Haupttests und drei Renderer-Tests bestehen. Neun Editorprüfungen decken UTF-8/BOM/LF/CRLF-Erhaltung, Unicode-Dateinamen, atomaren Austausch, neue Dateien und Speichern unter, externe Änderungen, gelöschte Quelldateien, Namenskollisionen, Schreibschutz, Größen-/Formatgrenzen, Syntaxlayout ohne Textveränderung sowie den Schutz ungespeicherter Dokumente ab. Ein egui-Test speist Unicode-Text und Tastaturereignisse ein und prüft Undo, Redo, Tab-Einrückung und die korrekte Unicode-Auswahl eines Suchtreffers. Ein Viewport-Test bestätigt CancelClose bei ungespeicherten Änderungen.
+
+Formatierung, Release-Build und die vier PTY-Modi für Ordnerübernahme, Neustart, Profile und Suche erfolgreich. Native Windows-Dateidialoge und die vollständige Bedienung im laufenden Fenster wurden nicht manuell geprüft. Keine Remote-Verbindungen, Datei-Uploads oder KI-Anfragen.
