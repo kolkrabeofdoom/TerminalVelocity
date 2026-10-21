@@ -31,3 +31,10 @@ BackgroundImage und TerminalView::set_background_image zeichnen eine geteilte GP
 ## 0.6.0: Text-Nachleuchten
 
 TextAfterglow speichert maximal 8192 aktuelle Glyphen und 512 Leuchtzeitpunkte. Neue/geänderte sichtbare Glyphen erhalten vier versetzte, quadratisch abklingende Lichtkonturen vor den Terminalzellen. Gelöschte Glyphen werden sofort verworfen. Fokus, Animationseinstellungen, Auswahl/Suchtreffer und Ansichtsänderungen begrenzen den Effekt. Die Tests der unveränderten Renderer-Quelldatei laufen jetzt über tests/renderer.rs in der Haupt-Suite.
+
+## 0.8.0: Sixel und portable ConPTY
+
+- `vendor/vte-0.15.0`: unveränderte Upstream-Version als Basis, ergänzt um DCS-Sixel-Callbacks, Unterscheidung vollständiger Terminierung/Abbruch, XTSMGRAPHICS und Zellgrößenabfrage. Die neue Perform-Methode delegiert standardmäßig an `unhook`, sodass bestehende Implementierungen kompatibel bleiben. MIT/Apache-2.0-Lizenzen liegen im Verzeichnis.
+- `vendor/alacritty_terminal-0.25.1`: begrenzter Sixel-Decoder und zeilenbasierter Bildspeicher; Anbindung an Scrollen, Löschen, Textausgabe, Bildschirmwechsel und Reset. Grafikfähigkeitsantworten, DEC-Modi 80/1070 und Bild-Zellgeometrie. ConPTY wird über den absoluten Pfad neben der EXE geladen. Ursprüngliche Apache-2.0-Lizenz und Referenztests bleiben erhalten.
+- `vendor/egui_term-0.1.0`: sichtbare Sixel-Bildsegmente werden als beschnittene Texturen zwischen Hintergrund und Text gezeichnet; Texturen außerhalb der Ansicht werden freigegeben. PTY-Antworten und Größenanfragen werden an den Kindprozess gesendet.
+- Die Rust-Versionen sind per `[patch.crates-io]` und `Cargo.lock` festgeschrieben. Portable Microsoft-Laufzeit: MIT-Lizenz unter `shells/conpty-LICENSE.txt`, Herkunft/Prüfsumme unter `shells/conpty-source.json`.

@@ -331,6 +331,7 @@ pub struct Tab {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Workspace {
+    pub sixel_enabled: bool,
     pub background: crate::background::Settings,
     pub effects: crate::effects::Settings,
     pub connections: Vec<crate::remote::Connection>,
@@ -352,6 +353,7 @@ impl Default for Workspace {
         Self {
             version: 1,
             background: crate::background::Settings::default(),
+            sixel_enabled: true,
             effects: crate::effects::Settings::default(),
             connections: vec![],
             ssh_path: String::new(),

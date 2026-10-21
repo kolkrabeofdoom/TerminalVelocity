@@ -1,5 +1,14 @@
 # Änderungen
 
+## 0.8.0 – 20. Oktober 2026
+
+- Sixel-Bilder im Terminal: 256 Farbregister, RGB/HLS, Wiederholungen, Rastermaße, Pixelseitenverhältnis und Transparenz.
+- Zeilenverankerte Darstellung mit Scrollback, Teil-Löschung durch Text, getrennten Haupt-/Alternativbildschirmen und begrenztem Bildspeicher.
+- Abfragen der Grafikfähigkeit und Zellgröße, DEC-Modi 80/1070; PTY-Antworten werden an das laufende Programm zurückgeleitet.
+- Abschaltbare Unterstützung in den Einstellungen und mitgeliefertes lokales Demo-Skript.
+- Portable Microsoft-ConPTY-Laufzeit mit festgeschriebener Version und SHA256, damit Bildsequenzen auf Windows ankommen.
+- Größen-/Schriftänderungen löschen Bilder; Einfügen/Löschen von Zeichen entfernt betroffene Bildsegmente. Keine dauerhafte Bildspeicherung.
+
 ## 0.7.0 – 20. Oktober 2026
 
 - Schlanker lokaler Editor als eigener Tab: Öffnen, Neu, Speichern/Speichern unter, Zeilennummern, Einrückung, Undo/Redo und Suche.

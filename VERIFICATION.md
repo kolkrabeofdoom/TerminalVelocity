@@ -68,3 +68,13 @@ Formatierung, alle 27 Hauptprüfungen einschließlich Offline-Remote-Tests, Rele
 37 Haupttests und drei Renderer-Tests bestehen. Neun Editorprüfungen decken UTF-8/BOM/LF/CRLF-Erhaltung, Unicode-Dateinamen, atomaren Austausch, neue Dateien und Speichern unter, externe Änderungen, gelöschte Quelldateien, Namenskollisionen, Schreibschutz, Größen-/Formatgrenzen, Syntaxlayout ohne Textveränderung sowie den Schutz ungespeicherter Dokumente ab. Ein egui-Test speist Unicode-Text und Tastaturereignisse ein und prüft Undo, Redo, Tab-Einrückung und die korrekte Unicode-Auswahl eines Suchtreffers. Ein Viewport-Test bestätigt CancelClose bei ungespeicherten Änderungen.
 
 Formatierung, Release-Build und die vier PTY-Modi für Ordnerübernahme, Neustart, Profile und Suche erfolgreich. Native Windows-Dateidialoge und die vollständige Bedienung im laufenden Fenster wurden nicht manuell geprüft. Keine Remote-Verbindungen, Datei-Uploads oder KI-Anfragen.
+
+## Sixel 0.8.0 – 20. Oktober 2026
+
+Lokaler CI-Ablauf erfolgreich: Formatierung, 37 Haupttests einschließlich Offline-Remote-Prüfungen, drei Effekt-Renderer-Tests, zehn Sixel-Tests, zwei echte ConPTY-Tests, 54 Upstream-vte-Parserprüfungen, Release-Build und vier PTY-Modi (Ordner, Neustart, Profile, Suche).
+
+Die Sixel-Tests prüfen RGB/HLS, Transparenz/Hintergrund, Wiederholungen, Rastergrößen, Seitenverhältnis, Farbebenen, jede Zweiteilung einer vollständigen Bildsequenz, Abbruch/unvollständige Daten, Wiederaufnahme normalen Texts, ungültige/überdimensionierte Eingaben, gezieltes Überschreiben/Löschen, Scrollback, Alternativbildschirm, Größenänderung, Abfragen/Modi, private/geteilte Paletten und Bildbegrenzung. Zusätzlich werden 500 deterministisch erzeugte fehlerhafte Bytefolgen verarbeitet.
+
+Ein realer PowerShell-Kindprozess sendet Sixel durch die gebündelte ConPTY-Laufzeit. Der zweite Integrationstest führt diese Ausgabe durch das echte Backend und den egui-Renderer: korrekte rote RGBA-Pixel, 12 × 6-Textur, Zeichenprimitive mit derselben Textur-ID und Texturfreigabe beim Abschalten werden geprüft. Dies ist ein Test ohne sichtbares Fenster, kein Nachweis der Ausgabe auf einem realen Bildschirm. Die lokal vorhandene System-ConPTY-Version hatte Sixel im vorgelagerten Transportversuch entfernt; die gebündelte Version reicht die Sequenz durch.
+
+Keine vollständige VT340-Konformitätsprüfung, kein Test aller externen Bildprogramme und keine reale SSH-/WinRM-Verbindung. GPU-/Treiberverhalten und grafische Bedienung bleiben manuell zu prüfen. Bibliotheks-Unit-Tests von alacritty_terminal wurden nicht separat ausgeführt; dessen geänderte Terminalpfade werden über die zehn Sixel-Integrationstests geprüft.

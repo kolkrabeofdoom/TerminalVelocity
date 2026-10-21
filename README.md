@@ -190,3 +190,21 @@ Gelöschte Zeichen hinterlassen keine Textreste. Ohne Animationen, bei Fokusverl
 - Maximal 256 KiB pro Datei. Speichern erfolgt über eine temporäre Datei im Zielordner und atomaren Austausch. Änderungen am Dateiinhalt außerhalb des Editors, gelöschte Quelldateien und Schreibschutz stoppen das Speichern. Bei einem Konflikt kann der eigene Entwurf unter einem anderen Namen gespeichert oder die externe Datei erneut geöffnet werden.
 
 Der Editor führt keine Skripte aus und lädt keine Dateien auf Server hoch. Er enthält weder Sprachserver noch Markdown-Vorschau. Entwürfe und Undo-Verlauf werden nicht im Workspace gespeichert; bei einem erzwungenen Prozessabbruch besteht keine Wiederherstellung. Der Button **Workspace speichern** speichert weiterhin nur das Terminal-Layout.
+
+## Sixel-Grafiken (0.8.0)
+
+Sixel ist standardmäßig aktiv. In **Einstellungen → Sixel-Grafiken im Terminal anzeigen** lässt es sich abschalten; gespeicherte Bilder werden dabei entfernt. Die Einstellung wird im Workspace gespeichert. Bilder kommen als Escape-Sequenzen aus einem Terminalprogramm, auch über SSH, sofern die Gegenstelle Sixel ausgibt. Ein Dateipfad allein zeigt noch kein Bild an.
+
+Zum Ausprobieren im PowerShell-Tab aus dem entpackten Paketordner:
+
+```powershell
+& .\shells\sixel-demo.ps1
+```
+
+Das Skript zeichnet ein farbiges 240 × 120-Pixel-Muster und schreibt anschließend darunter weiter. Es braucht weder Netzwerk noch zusätzliche Grafikprogramme. Für eigene Bilddateien ist ein externer Sixel-Konverter erforderlich.
+
+Unterstützt werden DCS-Sixel, 256 Farbregister mit RGB/HLS, Wiederholungen, Rasterabmessungen, Pixelseitenverhältnis, transparenter oder gefüllter Hintergrund, Grafikfähigkeits-/Zellgrößenabfragen sowie DEC-Modi 80 und 1070. Bilder scrollen mit dem Text und bleiben im begrenzten Scrollback sichtbar. Haupt- und Alternativbildschirm führen getrennte Bildbestände. Textüberschreiben und Löschbefehle entfernen die betroffenen Bildsegmente.
+
+Bewusste Grenzen: maximal 4096 Pixel je Seite und 2 Megapixel je Bild nach Skalierung; 4 MiB Eingabedaten je Sequenz; je Bildschirm maximal 16 MiB unkomprimierte Bilddaten, 32 Bilder und 4096 Zeilensegmente. Ältere Bilder werden bei Erreichen des Limits entfernt. Größen-, Schrift- oder Layoutänderungen löschen Bilder statt sie mit Text neu umzubrechen. Zeichen einfügen/löschen entfernt Bildteile ab der betroffenen Position. Bilder werden weder kopiert, durchsucht noch in Workspace-Dateien gespeichert. Dies ist kein Kitty-Grafikprotokoll und keine vollständige VT340-Emulation.
+
+Das Paket enthält Microsofts portable ConPTY-Version **1.25.260930003** (`conpty.dll` und `OpenConsole.exe`) neben der EXE. Sie wird ausschließlich dort geladen und verändert keine Windows-Systemdateien. Ältere System-ConPTY-Versionen können Sixel entfernen; deshalb beide Dateien beim Kopieren mitnehmen. Build und CI bereiten die geprüfte Laufzeit automatisch vor. Bei direktem Cargo-Aufruf vorher `./scripts/prepare-conpty.ps1` ausführen. Der erste Download braucht Internet; Quelle, SHA256 und MIT-Lizenz stehen unter `shells/conpty-*`.

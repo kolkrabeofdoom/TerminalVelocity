@@ -5,11 +5,14 @@ try {
     # Fail explicitly instead of silently skipping the offline integration tests.
     Get-Command pwsh.exe -ErrorAction Stop | Out-Null
     Get-Command ssh.exe -ErrorAction Stop | Out-Null
+    & (Join-Path $PSScriptRoot 'prepare-conpty.ps1')
 
     & cargo fmt -- --check
     if ($LASTEXITCODE -ne 0) { throw 'Formatting check failed' }
     & cargo test --locked -- --include-ignored
     if ($LASTEXITCODE -ne 0) { throw 'Offline tests failed' }
+    & cargo test --locked -p vte --lib
+    if ($LASTEXITCODE -ne 0) { throw 'Parser regression tests failed' }
     & (Join-Path $PSScriptRoot 'build.ps1') -SkipTests
 
     $targetRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $projectRoot 'target' }

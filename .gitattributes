@@ -5,4 +5,7 @@
 *.md text eol=lf
 *.ps1 text eol=crlf
 *.bash text eol=lf
+# Upstream terminal recordings are byte streams, including intentional CR/LF.
+*.recording binary
+*.vte binary
 

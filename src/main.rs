@@ -1015,6 +1015,11 @@ impl eframe::App for TerminalApp {
         while let Ok((id, event)) = self.receiver.try_recv() {
             handle_session_event(&mut self.workspace, &mut self.sessions, id, event);
         }
+        for session in self.sessions.values_mut() {
+            if let Some(backend) = &mut session.backend {
+                backend.set_sixel_enabled(self.workspace.sixel_enabled);
+            }
+        }
         self.editor.guard_exit(ctx);
         let editor_base = self
             .workspace
@@ -1345,6 +1350,10 @@ impl eframe::App for TerminalApp {
                 }
                 ui.add_enabled(!self.workspace.compatibility_transparency, egui::Checkbox::new(&mut self.workspace.acrylic, "Hintergrund weichzeichnen (Windows-Acryl)"));
                 ui.add(egui::Slider::new(&mut self.workspace.font_size, 10.0..=28.0).text("Schriftgröße"));
+                ui.separator();
+                ui.checkbox(&mut self.workspace.sixel_enabled, "Sixel-Grafiken im Terminal anzeigen");
+                ui.small("Bis 4096 Pixel pro Seite, 2 Megapixel je Bild; 16 MiB Bilddaten je Bildschirm. Größenänderungen löschen Bilder. Abschalten entfernt gespeicherte Grafiken.");
+                if let Some(backend) = self.sessions.get(&self.focused).and_then(|s| s.backend.as_ref()) { let (images, rejected) = backend.sixel_status(); ui.small(format!("Aktiver Bereich: {images} Bilder · {rejected} verworfene Bildsequenzen")); }
                 ui.separator();
                 self.workspace.effects.ui(ui);
                 ui.separator();

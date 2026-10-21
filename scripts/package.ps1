@@ -26,10 +26,14 @@ if (-not $validCache) {
 }
 New-Item -ItemType Directory -Path (Join-Path $packageRoot 'shells/powershell') -Force | Out-Null
 Copy-Item -LiteralPath $executable -Destination (Join-Path $packageRoot 'TerminalVelocity.exe')
+& (Join-Path $PSScriptRoot 'prepare-conpty.ps1')
+foreach ($name in @('conpty.dll','OpenConsole.exe')) {
+    Copy-Item -LiteralPath (Join-Path $targetRoot "release/$name") -Destination $packageRoot
+}
 foreach ($name in @('README.md','LICENSE','VERIFICATION.md','VENDOR_CHANGES.md','THIRD_PARTY_LICENSES.txt','CHANGELOG.md')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $name) -Destination $packageRoot
 }
-foreach ($name in @('terminalvelocity.bash','powershell-source.json')) {
+foreach ($name in @('terminalvelocity.bash','sixel-demo.ps1','powershell-source.json','conpty-source.json','conpty-LICENSE.txt')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot "shells/$name") -Destination (Join-Path $packageRoot "shells/$name")
 }
 Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $packageRoot 'shells/powershell')
@@ -49,6 +53,7 @@ Get-ChildItem -LiteralPath $packageRoot -File -Recurse | Sort-Object FullName | 
     cargo = (& cargo -V).Trim()
     cargo_lock_sha256 = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'Cargo.lock') -Algorithm SHA256).Hash.ToLowerInvariant()
     powershell_version = $source.version
+    conpty_version = (Get-Content -LiteralPath (Join-Path $projectRoot 'shells/conpty-source.json') -Raw | ConvertFrom-Json).version
     files = $files
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $packageRoot 'BUILD-INFO.json') -Encoding utf8NoBOM
 # Stable ordering and timestamps produce identical ZIPs for identical input files/tooling.

@@ -31,6 +31,7 @@ enum InputAction {
 
 #[derive(Clone, Default)]
 pub struct TerminalViewState {
+    sixel_textures: std::collections::HashMap<u64, egui::TextureHandle>,
     is_dragged: bool,
     trail: crate::effects::CursorTrail,
     afterglow: crate::effects::TextAfterglow,
@@ -271,6 +272,23 @@ impl<'a> TerminalView<'a> {
             image.paint(painter, layout.rect);
         }
         effects.paint_background(painter, layout.rect, time);
+        let mut visible_images = std::collections::HashSet::new();
+        let image_painter = painter.with_clip_rect(layout.rect.intersect(painter.clip_rect()));
+        for tile in &content.sixel {
+            let y = (tile.line + content.grid.display_offset() as i32) as f32 * cell_height;
+            let destination = Rect::from_min_size(layout_min + Vec2::new(tile.x as f32, y), Vec2::new(tile.width as f32, tile.height as f32));
+            if !destination.intersects(layout.rect) { continue; }
+            visible_images.insert(tile.image.id);
+            let texture = state.sixel_textures.entry(tile.image.id).or_insert_with(|| {
+                painter.ctx().load_texture(format!("sixel-{}", tile.image.id),
+                    egui::ColorImage::from_rgba_unmultiplied([tile.image.width, tile.image.height], &tile.image.rgba), egui::TextureOptions::NEAREST)
+            });
+            let uv = Rect::from_min_max(
+                Pos2::new(tile.source_x as f32 / tile.image.width as f32, tile.source_y as f32 / tile.image.height as f32),
+                Pos2::new((tile.source_x + tile.width) as f32 / tile.image.width as f32, (tile.source_y + tile.height) as f32 / tile.image.height as f32));
+            image_painter.image(texture.id(), destination, uv, Color32::WHITE);
+        }
+        state.sixel_textures.retain(|id, _| visible_images.contains(id));
         if effects.animated() && matches!(effects.preset, 1 | 3) {
             layout
                 .ctx

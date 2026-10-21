@@ -184,7 +184,9 @@ impl TerminalBackend {
         let (event_sender, event_receiver) = mpsc::channel();
         let event_proxy = EventProxy(event_sender);
         let mut term = Term::new(config, &terminal_size, event_proxy.clone());
+        term.sixel.geometry(terminal_size.cell_width as usize, terminal_size.cell_height as usize);
         let initial_content = RenderableContent {
+            sixel: Vec::new(),
             grid: term.grid().clone(),
             selectable_range: None,
             terminal_mode: *term.mode(),
@@ -196,12 +198,28 @@ impl TerminalBackend {
         let pty_event_loop =
             EventLoop::new(term.clone(), event_proxy, pty, false, false)?;
         let notifier = Notifier(pty_event_loop.channel());
+        let reply_notifier = Notifier(pty_event_loop.channel());
+        let reply_term = term.clone();
         let url_regex = RegexSearch::new(r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file://|git://|ssh:|ftp://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();
         let _pty_event_loop_thread = pty_event_loop.spawn();
         let _pty_event_subscription = std::thread::Builder::new()
             .name(format!("pty_event_subscription_{}", id))
             .spawn(move || {
                 while let Ok(event) = event_receiver.recv() {
+                    match &event {
+                        Event::PtyWrite(text) => reply_notifier.notify(text.clone().into_bytes()),
+                        Event::TextAreaSizeRequest(format) => {
+                            let term = reply_term.lock();
+                            let size = WindowSize {
+                                num_lines: term.screen_lines() as u16,
+                                num_cols: term.columns() as u16,
+                                cell_width: term.sixel.cell_width as u16,
+                                cell_height: term.sixel.cell_height as u16,
+                            };
+                            reply_notifier.notify(format(size).into_bytes());
+                        },
+                        _ => {},
+                    }
                     if pty_event_proxy_sender.send((id, event.clone())).is_err() {
                         break;
                     }
@@ -330,6 +348,7 @@ impl TerminalBackend {
         if self.search.as_ref().is_some_and(|s| s.refreshed.elapsed() >= std::time::Duration::from_millis(300)) { self.refresh_search(); }
         let term = self.term.clone();
         let mut terminal = term.lock();
+        self.last_content.sixel = terminal.sixel.active.tiles.clone();
         let selectable_range = match &terminal.selection {
             Some(s) => s.to_range(&terminal),
             None => None,
@@ -346,6 +365,16 @@ impl TerminalBackend {
 
     pub fn last_content(&self) -> &RenderableContent {
         &self.last_content
+    }
+
+    pub fn set_sixel_enabled(&mut self, enabled: bool) {
+        self.term.lock().set_sixel_enabled(enabled);
+    }
+
+    pub fn sixel_status(&self) -> (usize, u64) {
+        let term = self.term.lock();
+        let ids: std::collections::BTreeSet<_> = term.sixel.active.tiles.iter().map(|t| t.image.id).collect();
+        (ids.len(), term.sixel.rejected)
     }
 
     fn process_link_action(
@@ -542,6 +571,7 @@ impl TerminalBackend {
             };
 
             self.notifier.on_resize(self.size.into());
+            terminal.sixel.geometry(self.size.cell_width as usize, self.size.cell_height as usize);
             terminal.resize(TermSize::new(
                 self.size.num_cols as usize,
                 self.size.num_lines as usize,
@@ -610,6 +640,7 @@ fn visible_regex_match_iter<'a>(
 }
 
 pub struct RenderableContent {
+    pub sixel: Vec<alacritty_terminal::sixel::Tile>,
     pub grid: Grid<Cell>,
     pub hovered_hyperlink: Option<RangeInclusive<Point>>,
     pub selectable_range: Option<SelectionRange>,
@@ -621,6 +652,7 @@ pub struct RenderableContent {
 impl Default for RenderableContent {
     fn default() -> Self {
         Self {
+            sixel: Vec::new(),
             grid: Grid::new(0, 0, 0),
             hovered_hyperlink: None,
             selectable_range: None,

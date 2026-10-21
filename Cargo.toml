@@ -1,6 +1,6 @@
 [package]
 name = "terminalvelocity"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 license = "MIT"
 description = "Portable Windows terminal prototype"
@@ -33,3 +33,8 @@ strip = true
 
 [dev-dependencies]
 egui = "=0.31.1"
+alacritty_terminal = "=0.25.1"
+
+[patch.crates-io]
+alacritty_terminal = { path = "vendor/alacritty_terminal-0.25.1" }
+vte = { path = "vendor/vte-0.15.0" }
