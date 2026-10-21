@@ -27,6 +27,27 @@ fn terminal() -> (Term<Events>, Processor, Events) {
 const RED: &[u8] = b"\x1bP0;1q\"1;1;8;6#1;2;100;0;0#1!8~\x1b\\";
 
 #[test]
+fn local_rgba_shares_scroll_erase_and_limits_without_sixel_conversion() {
+    let (mut term, mut parser, _) = terminal();
+    parser.advance(&mut term, b"Prompt> ");
+    let pixels = [17, 33, 201, 128].repeat(48);
+    term.display_rgba(8, 6, pixels.clone()).unwrap();
+    assert_eq!(term.grid()[Line(0)][Column(0)].c, 'P');
+    assert_eq!(term.sixel.active.tiles[0].line, 1);
+    assert_eq!(term.sixel.active.tiles[0].image.rgba, pixels);
+    let id = term.sixel.active.tiles[0].image.id;
+    parser.advance(&mut term, RED);
+    assert_ne!(term.sixel.active.tiles.last().unwrap().image.id, id);
+    assert!(term.display_rgba(2, 2, vec![0; 3]).is_err());
+    assert!(term.display_rgba(usize::MAX, 10, vec![]).is_err());
+    parser.advance(&mut term, b"\x1b[2;1H\x1b[2K");
+    assert!(term.sixel.active.tiles.iter().all(|t| t.image.id != id));
+    term.set_sixel_enabled(false);
+    assert!(term.display_rgba(1, 1, vec![0; 4]).is_err());
+    assert!(term.sixel.active.tiles.is_empty());
+}
+
+#[test]
 fn rgb_hls_repeat_raster_and_transparency() {
     let image = decode(
         b"\"1;1;3;1#1;2;100;0;0#1!2@#2;1;240;50;100#2@",

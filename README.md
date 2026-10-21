@@ -193,7 +193,7 @@ Der Editor führt keine Skripte aus und lädt keine Dateien auf Server hoch. Er 
 
 ## Sixel-Grafiken (0.8.0)
 
-Sixel ist standardmäßig aktiv. In **Einstellungen → Sixel-Grafiken im Terminal anzeigen** lässt es sich abschalten; gespeicherte Bilder werden dabei entfernt. Die Einstellung wird im Workspace gespeichert. Bilder kommen als Escape-Sequenzen aus einem Terminalprogramm, auch über SSH, sofern die Gegenstelle Sixel ausgibt. Ein Dateipfad allein zeigt noch kein Bild an.
+Sixel ist standardmäßig aktiv. In **Einstellungen → Bilder im Terminal anzeigen (Sixel und lokale Dateien)** lässt es sich abschalten; gespeicherte Bilder werden dabei entfernt. Die Einstellung wird im Workspace gespeichert. Bilder kommen als Escape-Sequenzen aus einem Terminalprogramm, auch über SSH, sofern die Gegenstelle Sixel ausgibt. Ein als Terminaltext ausgegebener Dateipfad allein zeigt noch kein Bild an.
 
 Zum Ausprobieren im PowerShell-Tab aus dem entpackten Paketordner:
 
@@ -201,10 +201,20 @@ Zum Ausprobieren im PowerShell-Tab aus dem entpackten Paketordner:
 & .\shells\sixel-demo.ps1
 ```
 
-Das Skript zeichnet ein farbiges 240 × 120-Pixel-Muster und schreibt anschließend darunter weiter. Es braucht weder Netzwerk noch zusätzliche Grafikprogramme. Für eigene Bilddateien ist ein externer Sixel-Konverter erforderlich.
+Das Skript zeichnet ein farbiges 240 × 120-Pixel-Muster und schreibt anschließend darunter weiter. Es braucht weder Netzwerk noch zusätzliche Grafikprogramme. Eigene Bilddateien lassen sich seit 0.9.0 direkt öffnen; Programme, die selbst Sixel ausgeben möchten, benötigen weiterhin einen entsprechenden Encoder.
 
 Unterstützt werden DCS-Sixel, 256 Farbregister mit RGB/HLS, Wiederholungen, Rasterabmessungen, Pixelseitenverhältnis, transparenter oder gefüllter Hintergrund, Grafikfähigkeits-/Zellgrößenabfragen sowie DEC-Modi 80 und 1070. Bilder scrollen mit dem Text und bleiben im begrenzten Scrollback sichtbar. Haupt- und Alternativbildschirm führen getrennte Bildbestände. Textüberschreiben und Löschbefehle entfernen die betroffenen Bildsegmente.
 
 Bewusste Grenzen: maximal 4096 Pixel je Seite und 2 Megapixel je Bild nach Skalierung; 4 MiB Eingabedaten je Sequenz; je Bildschirm maximal 16 MiB unkomprimierte Bilddaten, 32 Bilder und 4096 Zeilensegmente. Ältere Bilder werden bei Erreichen des Limits entfernt. Größen-, Schrift- oder Layoutänderungen löschen Bilder statt sie mit Text neu umzubrechen. Zeichen einfügen/löschen entfernt Bildteile ab der betroffenen Position. Bilder werden weder kopiert, durchsucht noch in Workspace-Dateien gespeichert. Dies ist kein Kitty-Grafikprotokoll und keine vollständige VT340-Emulation.
 
 Das Paket enthält Microsofts portable ConPTY-Version **1.25.260930003** (`conpty.dll` und `OpenConsole.exe`) neben der EXE. Sie wird ausschließlich dort geladen und verändert keine Windows-Systemdateien. Ältere System-ConPTY-Versionen können Sixel entfernen; deshalb beide Dateien beim Kopieren mitnehmen. Build und CI bereiten die geprüfte Laufzeit automatisch vor. Bei direktem Cargo-Aufruf vorher `./scripts/prepare-conpty.ps1` ausführen. Der erste Download braucht Internet; Quelle, SHA256 und MIT-Lizenz stehen unter `shells/conpty-*`.
+
+## Lokale Bilder öffnen (0.9.0)
+
+Im gewünschten Terminalbereich **Rechtsklick → Bild anzeigen …** wählen oder eine lokale Bilddatei aus dem Explorer auf dessen Ausgabefläche ziehen. Bei Teilungen entscheidet die Ablageposition über den Zielbereich. PNG, JPEG, WebP und BMP werden unterstützt. Eine Textmarkierung ist dafür nicht nötig. Im Editor oder bei geöffneten App-Dialogen ist die Ablage deaktiviert.
+
+Das Bild erscheint an der aktuellen Ausgabeposition; eine bereits begonnene Textzeile wird vorher abgeschlossen. Große Bilder werden proportional auf die Terminalbreite und das Bildlimit verkleinert, kleine Bilder nicht vergrößert. Der gemeinsame Decoder begrenzt die längste Seite zunächst auf 2048 Pixel. Transparenz und volle RGB-Farben bleiben erhalten. Laufende Terminalprogramme können Bildbereiche später überschreiben oder löschen. Bei großen Bildern lässt sich der obere Teil über den Scrollback erreichen.
+
+Das Laden läuft im Hintergrund, jeweils für eine Datei. Maximal 32 MiB Dateigröße, 16 Megapixel und 16384 Pixel je Quellseite; danach gelten die Sixel-Bildspeichergrenzen. Mehrfachablagen, ungültige Dateien und Ladefehler werden in der Statusleiste gemeldet. Wird die Zielsitzung während des Ladens geschlossen/neugestartet oder ihre Breite geändert, wird das Ergebnis verworfen.
+
+Unter **Einstellungen → Bilder im Terminal anzeigen (Sixel und lokale Dateien)** lassen sich beide Eingangswege abschalten. Die Bilder werden lokal gelesen und direkt dargestellt: kein Shell-Befehl, kein Upload und keine Übertragung an SSH-/WinRM-Gegenstellen. Fenster-/Schriftänderungen löschen sie; im Workspace werden weder Bilder noch ihre Dateipfade gespeichert.

@@ -47,6 +47,47 @@ impl<T: EventListener> Term<T> {
         if !self.sixel.private_colors {
             self.sixel.colors = palette;
         }
+        self.place_image(image, background != 1);
+    }
+
+    /// Insert trusted local RGBA through the same bounded image store as SIXEL.
+    pub fn display_rgba(
+        &mut self,
+        width: usize,
+        height: usize,
+        rgba: Vec<u8>,
+    ) -> Result<(), &'static str> {
+        if !self.sixel.enabled {
+            return Err("Bildanzeige ist in den Einstellungen abgeschaltet.");
+        }
+        if width == 0
+            || height == 0
+            || width > crate::sixel::MAX_SIDE
+            || height > crate::sixel::MAX_SIDE
+            || width.saturating_mul(height) > crate::sixel::MAX_PIXELS
+            || width.checked_mul(height).and_then(|n| n.checked_mul(4)) != Some(rgba.len())
+        {
+            return Err("Ungültige oder zu große Bilddaten.");
+        }
+        let image = Arc::new(crate::sixel::Image {
+            id: crate::sixel::next_image_id(),
+            width,
+            height,
+            rgba,
+        });
+        let scrolling = self.sixel.scrolling;
+        self.sixel.scrolling = true;
+        if self.grid.cursor.point.column.0 > 0 {
+            self.linefeed();
+        }
+        self.carriage_return();
+        self.place_image(image, true);
+        self.sixel.scrolling = scrolling;
+        self.scroll_display(crate::grid::Scroll::Bottom);
+        Ok(())
+    }
+
+    fn place_image(&mut self, image: Arc<crate::sixel::Image>, replace: bool) {
         let cell_width = self.sixel.cell_width;
         let cell_height = self.sixel.cell_height;
         let rows = image.height.div_ceil(cell_height);
@@ -72,7 +113,7 @@ impl<T: EventListener> Term<T> {
                 self.grid[Line(row)][Column(col)] = Cell::default();
             }
         }
-        if background != 1 {
+        if replace {
             self.sixel
                 .active
                 .erase(line, line + rows as i32 - 1, x, x + image.width);

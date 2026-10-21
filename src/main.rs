@@ -4,6 +4,7 @@ mod ai;
 mod background;
 mod editor;
 mod effects;
+mod inline_image;
 mod model;
 mod profiles;
 mod remote;
@@ -102,6 +103,7 @@ fn set_window_opacity(
 struct TerminalApp {
     editor: editor::Editor,
     background_cache: background::Cache,
+    image_loader: inline_image::Loader,
     workspace: Workspace,
     sessions: HashMap<u64, Session>,
     sender: Sender<(u64, PtyEvent)>,
@@ -179,6 +181,7 @@ impl TerminalApp {
         let mut app = Self {
             editor: editor::Editor::default(),
             background_cache: background::Cache::default(),
+            image_loader: inline_image::Loader::default(),
             workspace,
             sessions: HashMap::new(),
             sender,
@@ -799,6 +802,7 @@ fn draw_node(
     close: &mut Option<u64>,
     retry: &mut Option<u64>,
     ai_selection: &mut Option<ai::Draft>,
+    image_request: &mut Option<inline_image::Request>,
 ) {
     match node {
         Node::Split {
@@ -856,6 +860,7 @@ fn draw_node(
                 close,
                 retry,
                 ai_selection,
+                image_request,
             );
             draw_node(
                 ui,
@@ -870,6 +875,7 @@ fn draw_node(
                 close,
                 retry,
                 ai_selection,
+                image_request,
             );
         }
         Node::Pane(pane) => {
@@ -959,7 +965,20 @@ fn draw_node(
                             }));
                         let response = ui.add(view);
                         if enabled {
+                            let over_image_target = ui.input(|i| i.pointer.latest_pos().is_some_and(|p| response.rect.contains(p)));
+                            if over_image_target {
+                                let files = inline_image::take_drop(ui.ctx(), response.rect);
+                                if !files.is_empty() { *image_request = Some(inline_image::Request::Drop(pane.id, files)); }
+                                if ui.input(|i| !i.raw.hovered_files.is_empty()) {
+                                    ui.painter().rect_stroke(response.rect.shrink(1.0), 2.0, Stroke::new(2.0, Color32::LIGHT_BLUE), egui::StrokeKind::Inside);
+                                }
+                            }
                             response.context_menu(|ui| {
+                                if ui.button("Bild anzeigen …").clicked() {
+                                    *image_request = Some(inline_image::Request::Choose(pane.id));
+                                    ui.close_menu();
+                                }
+                                ui.separator();
                                 let text = backend.selectable_content();
                                 let selected = !text.trim().is_empty();
                                 if ui.add_enabled(selected, egui::Button::new("Kopieren")).clicked() { ui.ctx().copy_text(text.clone()); ui.close_menu(); }
@@ -1242,6 +1261,7 @@ impl eframe::App for TerminalApp {
         let mut retry_target = None;
         self.search_bar(ctx, background);
         let mut ai_selection = None;
+        let mut image_request = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(background).inner_margin(8.0))
             .show(ctx, |ui| {
@@ -1278,9 +1298,77 @@ impl eframe::App for TerminalApp {
                         &mut self.close_target,
                         &mut retry_target,
                         &mut ai_selection,
+                        &mut image_request,
                     );
                 }
             });
+        if let Some(request) = image_request {
+            let (id, path) = match request {
+                inline_image::Request::Choose(id) => (
+                    id,
+                    background::choose_image_file(dialog_owner, "Bild im Terminal anzeigen"),
+                ),
+                inline_image::Request::Drop(id, files) => {
+                    (id, inline_image::dropped_path(files).map(Some))
+                }
+            };
+            match path {
+                Ok(Some(path)) => {
+                    let result = if !self.workspace.sixel_enabled {
+                        Err("Bitte zuerst die Bildanzeige in den Einstellungen einschalten.".into())
+                    } else if let Some(session) = self.sessions.get(&id) {
+                        if let Some(backend) = &session.backend {
+                            self.image_loader.start(
+                                session.generation,
+                                backend.image_width(),
+                                path,
+                                ctx,
+                            )
+                        } else {
+                            Err("Der Terminalbereich ist nicht verfügbar.".into())
+                        }
+                    } else {
+                        Err("Der Terminalbereich wurde geschlossen.".into())
+                    };
+                    self.status = match result {
+                        Ok(()) => "Bild wird geladen …".into(),
+                        Err(error) => error,
+                    };
+                }
+                Ok(None) => {}
+                Err(error) => self.status = error,
+            }
+        }
+        if let Some((generation, width, result)) = self.image_loader.poll() {
+            let result = result.and_then(|image| {
+                if !self.workspace.sixel_enabled {
+                    return Err("Bildanzeige wurde abgeschaltet.".into());
+                }
+                let backend = self
+                    .sessions
+                    .values_mut()
+                    .find(|s| s.generation == generation)
+                    .and_then(|s| s.backend.as_mut())
+                    .ok_or("Zielsitzung wurde geschlossen oder neu gestartet.")?;
+                if backend.image_width() != width {
+                    return Err(
+                        "Terminalgröße wurde geändert. Bitte das Bild erneut öffnen.".into(),
+                    );
+                }
+                backend
+                    .display_rgba(
+                        image.width() as usize,
+                        image.height() as usize,
+                        image.into_raw(),
+                    )
+                    .map_err(|e| e.to_string())
+            });
+            self.status = match result {
+                Ok(()) => "Bild lokal im Terminal angezeigt.".into(),
+                Err(error) => format!("Bild nicht angezeigt: {error}"),
+            };
+            ctx.request_repaint();
+        }
         if let Some(mut draft) = ai_selection {
             if self.workspace.default_shell.is_ai() {
                 draft.provider = self.workspace.default_shell;
@@ -1351,7 +1439,7 @@ impl eframe::App for TerminalApp {
                 ui.add_enabled(!self.workspace.compatibility_transparency, egui::Checkbox::new(&mut self.workspace.acrylic, "Hintergrund weichzeichnen (Windows-Acryl)"));
                 ui.add(egui::Slider::new(&mut self.workspace.font_size, 10.0..=28.0).text("Schriftgröße"));
                 ui.separator();
-                ui.checkbox(&mut self.workspace.sixel_enabled, "Sixel-Grafiken im Terminal anzeigen");
+                ui.checkbox(&mut self.workspace.sixel_enabled, "Bilder im Terminal anzeigen (Sixel und lokale Dateien)");
                 ui.small("Bis 4096 Pixel pro Seite, 2 Megapixel je Bild; 16 MiB Bilddaten je Bildschirm. Größenänderungen löschen Bilder. Abschalten entfernt gespeicherte Grafiken.");
                 if let Some(backend) = self.sessions.get(&self.focused).and_then(|s| s.backend.as_ref()) { let (images, rejected) = backend.sixel_status(); ui.small(format!("Aktiver Bereich: {images} Bilder · {rejected} verworfene Bildsequenzen")); }
                 ui.separator();
@@ -1773,6 +1861,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
         let mut app = TerminalApp {
             editor: editor::Editor::default(),
             background_cache: background::Cache::default(),
+            image_loader: inline_image::Loader::default(),
             workspace,
             sessions: HashMap::new(),
             sender,
@@ -2105,6 +2194,7 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
         let mut app = TerminalApp {
             editor: editor::Editor::default(),
             background_cache: background::Cache::default(),
+            image_loader: inline_image::Loader::default(),
             workspace,
             sessions: HashMap::new(),
             sender,

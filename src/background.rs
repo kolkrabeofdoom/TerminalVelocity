@@ -165,6 +165,14 @@ impl Cache {
 }
 
 fn load_image(path: &Path) -> Result<egui::ColorImage, String> {
+    let rgba = load_rgba(path)?;
+    Ok(egui::ColorImage::from_rgba_unmultiplied(
+        [rgba.width() as usize, rgba.height() as usize],
+        rgba.as_raw(),
+    ))
+}
+
+pub(crate) fn load_rgba(path: &Path) -> Result<image::RgbaImage, String> {
     use std::io::Read;
     let file = std::fs::File::open(path).map_err(|e| format!("Bild nicht geöffnet: {e}"))?;
     let mut bytes = Vec::new();
@@ -174,10 +182,19 @@ fn load_image(path: &Path) -> Result<egui::ColorImage, String> {
     if bytes.len() > 32 * 1024 * 1024 {
         return Err("Bilddatei ist größer als 32 MiB.".into());
     }
-    decode_image(&bytes)
+    decode_rgba(&bytes)
 }
 
+#[cfg(test)]
 fn decode_image(bytes: &[u8]) -> Result<egui::ColorImage, String> {
+    let rgba = decode_rgba(bytes)?;
+    Ok(egui::ColorImage::from_rgba_unmultiplied(
+        [rgba.width() as usize, rgba.height() as usize],
+        rgba.as_raw(),
+    ))
+}
+
+fn decode_rgba(bytes: &[u8]) -> Result<image::RgbaImage, String> {
     let format = image::guess_format(bytes).map_err(|_| "Kein unterstütztes Bild erkannt.")?;
     if !matches!(
         format,
@@ -209,21 +226,24 @@ fn decode_image(bytes: &[u8]) -> Result<egui::ColorImage, String> {
     if image.width() > 2048 || image.height() > 2048 {
         image = image.resize(2048, 2048, image::imageops::FilterType::Triangle);
     }
-    let rgba = image.into_rgba8();
-    Ok(egui::ColorImage::from_rgba_unmultiplied(
-        [rgba.width() as usize, rgba.height() as usize],
-        rgba.as_raw(),
-    ))
+    Ok(image.into_rgba8())
 }
 
 fn choose_file(owner: *mut std::ffi::c_void) -> Result<Option<PathBuf>, String> {
+    choose_image_file(owner, "Hintergrundbild auswählen")
+}
+
+pub(crate) fn choose_image_file(
+    owner: *mut std::ffi::c_void,
+    title: &str,
+) -> Result<Option<PathBuf>, String> {
     use std::os::windows::ffi::OsStringExt;
     use windows_sys::Win32::UI::Controls::Dialogs::*;
     let mut buffer = vec![0u16; 32768];
     let filter: Vec<u16> = "Bilder (PNG, JPEG, WebP, BMP)\0*.png;*.jpg;*.jpeg;*.webp;*.bmp\0\0"
         .encode_utf16()
         .collect();
-    let title: Vec<u16> = "Hintergrundbild auswählen\0".encode_utf16().collect();
+    let title: Vec<u16> = title.encode_utf16().chain(Some(0)).collect();
     // The buffers outlive the modal dialog; no hooks or callbacks are installed.
     unsafe {
         let mut dialog: OPENFILENAMEW = std::mem::zeroed();

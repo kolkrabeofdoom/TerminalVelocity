@@ -371,6 +371,16 @@ impl TerminalBackend {
         self.term.lock().set_sixel_enabled(enabled);
     }
 
+    pub fn image_width(&self) -> usize {
+        let term = self.term.lock();
+        term.columns() * term.sixel.cell_width
+    }
+
+    pub fn display_rgba(&mut self, width: usize, height: usize, rgba: Vec<u8>) -> Result<()> {
+        self.term.lock().display_rgba(width, height, rgba)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+    }
+
     pub fn sixel_status(&self) -> (usize, u64) {
         let term = self.term.lock();
         let ids: std::collections::BTreeSet<_> = term.sixel.active.tiles.iter().map(|t| t.image.id).collect();

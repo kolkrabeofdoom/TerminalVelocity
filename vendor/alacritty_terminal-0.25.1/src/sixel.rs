@@ -267,9 +267,9 @@ pub fn decode(
             );
         }
     }
-    static ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
     Ok(Image {
-        id: ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        id: next_image_id(),
         width: out_width,
         height: out_height,
         rgba,
@@ -377,4 +377,9 @@ impl Store {
         self.tiles
             .retain(|t| t.width > 0 && t.line >= -(history as i32));
     }
+}
+
+pub fn next_image_id() -> u64 {
+    static ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }

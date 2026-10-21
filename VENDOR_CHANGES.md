@@ -38,3 +38,7 @@ TextAfterglow speichert maximal 8192 aktuelle Glyphen und 512 Leuchtzeitpunkte. 
 - `vendor/alacritty_terminal-0.25.1`: begrenzter Sixel-Decoder und zeilenbasierter Bildspeicher; Anbindung an Scrollen, Löschen, Textausgabe, Bildschirmwechsel und Reset. Grafikfähigkeitsantworten, DEC-Modi 80/1070 und Bild-Zellgeometrie. ConPTY wird über den absoluten Pfad neben der EXE geladen. Ursprüngliche Apache-2.0-Lizenz und Referenztests bleiben erhalten.
 - `vendor/egui_term-0.1.0`: sichtbare Sixel-Bildsegmente werden als beschnittene Texturen zwischen Hintergrund und Text gezeichnet; Texturen außerhalb der Ansicht werden freigegeben. PTY-Antworten und Größenanfragen werden an den Kindprozess gesendet.
 - Die Rust-Versionen sind per `[patch.crates-io]` und `Cargo.lock` festgeschrieben. Portable Microsoft-Laufzeit: MIT-Lizenz unter `shells/conpty-LICENSE.txt`, Herkunft/Prüfsumme unter `shells/conpty-source.json`.
+
+## 0.9.0: Direkte lokale Bildanzeige
+
+`Term::display_rgba` validiert RGBA-Abmessungen und Pufferlänge und nutzt dieselbe Platzierung, Bild-ID-Vergabe und Speicherbegrenzung wie der Sixel-Decoder. Ein lokales Bild beginnt am Zeilenanfang, nach einer gegebenenfalls begonnenen Textzeile; Sixel-Modi bleiben erhalten. egui_term stellt die verfügbare Pixelbreite und die lokale Einfügefunktion bereit. Dateiauswahl, Ablagezuordnung, asynchrones Decodieren und Skalierung liegen im Hauptprogramm. Keine zusätzlichen Abhängigkeiten.

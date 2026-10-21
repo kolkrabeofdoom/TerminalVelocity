@@ -78,3 +78,11 @@ Die Sixel-Tests prüfen RGB/HLS, Transparenz/Hintergrund, Wiederholungen, Raster
 Ein realer PowerShell-Kindprozess sendet Sixel durch die gebündelte ConPTY-Laufzeit. Der zweite Integrationstest führt diese Ausgabe durch das echte Backend und den egui-Renderer: korrekte rote RGBA-Pixel, 12 × 6-Textur, Zeichenprimitive mit derselben Textur-ID und Texturfreigabe beim Abschalten werden geprüft. Dies ist ein Test ohne sichtbares Fenster, kein Nachweis der Ausgabe auf einem realen Bildschirm. Die lokal vorhandene System-ConPTY-Version hatte Sixel im vorgelagerten Transportversuch entfernt; die gebündelte Version reicht die Sequenz durch.
 
 Keine vollständige VT340-Konformitätsprüfung, kein Test aller externen Bildprogramme und keine reale SSH-/WinRM-Verbindung. GPU-/Treiberverhalten und grafische Bedienung bleiben manuell zu prüfen. Bibliotheks-Unit-Tests von alacritty_terminal wurden nicht separat ausgeführt; dessen geänderte Terminalpfade werden über die zehn Sixel-Integrationstests geprüft.
+
+## Lokale Bildanzeige 0.9.0 – 21. Oktober 2026
+
+Lokaler CI-Ablauf erfolgreich: 41 Haupttests, drei Effekt-Renderer-Tests, elf Bild-/Sixel-Tests, zwei ConPTY-Tests und 54 Parserprüfungen (insgesamt 111). Formatierung, Release-Build und vier PTY-Modi für Ordnerübernahme, Neustart, Profile und Suche ebenfalls erfolgreich.
+
+Neu geprüft: proportionale Verkleinerung ohne Vergrößerung, Alpha-Erhaltung und Pixellimit; Ablage genau einer lokalen Datei; egui-Ablageereignis nur im Bereich unter dem Mauszeiger und nur einmal; asynchrones Laden mit Zielkennung, Begrenzung auf einen Ladeauftrag und Fehlerrückgabe; direkte RGBA-Anzeige ohne Farbpalettenkonvertierung, Erhaltung einer begonnenen Textzeile, unterschiedliche Bild-IDs, gemeinsames Löschen und Abschalten sowie Ablehnung ungültiger Puffer. Der bestehende ConPTY-/egui-Test prüft zusätzlich Upload, Farbwerte und Zeichenprimitive eines direkt eingefügten lokalen Bildes.
+
+Native Explorer-Ablage und Windows-Dateidialog wurden nicht im sichtbaren Fenster bedient. Die UI-Prüfung speist egui-Eingabeereignisse ein; Rendererprüfungen laufen ohne sichtbares Fenster. Keine echten Remote-Verbindungen oder Datei-Uploads.

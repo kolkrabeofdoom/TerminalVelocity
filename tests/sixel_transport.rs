@@ -102,4 +102,22 @@ fn conpty_backend_uploads_and_paints_sixel_texture() {
     backend.set_sixel_enabled(false);
     let cleared = frame(&mut backend);
     assert!(cleared.textures_delta.free.contains(texture_id));
+    backend.set_sixel_enabled(true);
+    backend
+        .display_rgba(12, 6, [0, 255, 0, 255].repeat(72))
+        .unwrap();
+    let local = frame(&mut backend);
+    let (local_id, delta) = local
+        .textures_delta
+        .set
+        .iter()
+        .find(|(_, delta)| delta.image.size() == [12, 6])
+        .expect("Local image texture upload");
+    let egui::ImageData::Color(pixels) = &delta.image else {
+        panic!("RGBA expected");
+    };
+    assert!(pixels.pixels.iter().all(|c| *c == egui::Color32::GREEN));
+    assert_ne!(texture_id, local_id);
+    let primitives = context.tessellate(local.shapes, local.pixels_per_point);
+    assert!(primitives.iter().any(|p| matches!(&p.primitive, egui::epaint::Primitive::Mesh(mesh) if mesh.texture_id == *local_id)));
 }

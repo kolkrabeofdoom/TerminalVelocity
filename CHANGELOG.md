@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.9.0 – 21. Oktober 2026
+
+- „Bild anzeigen …“ im Terminal-Kontextmenü und Drag-and-drop einer lokalen Bilddatei auf den gewünschten Bereich.
+- PNG, JPEG, WebP und BMP werden direkt als RGBA dargestellt, ohne Sixel-Konverter oder Farbpalettenreduktion.
+- Laden im Hintergrund, proportionale Verkleinerung auf die Terminalbreite und bestehende Speichergrenzen; keine Vergrößerung kleiner Bilder.
+- Gemeinsamer Bildspeicher für lokale Bilder und Sixel, einschließlich Scrollback, Löschen und Texturfreigabe. Die Einstellung zum Abschalten gilt für beide Eingangswege.
+- Ladeergebnisse werden bei geschlossener/neugestarteter Zielsitzung oder geänderter Bereichsbreite verworfen.
+
 ## 0.8.0 – 20. Oktober 2026
 
 - Sixel-Bilder im Terminal: 256 Farbregister, RGB/HLS, Wiederholungen, Rastermaße, Pixelseitenverhältnis und Transparenz.
