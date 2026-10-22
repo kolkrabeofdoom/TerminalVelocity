@@ -42,3 +42,7 @@ TextAfterglow speichert maximal 8192 aktuelle Glyphen und 512 Leuchtzeitpunkte. 
 ## 0.9.0: Direkte lokale Bildanzeige
 
 `Term::display_rgba` validiert RGBA-Abmessungen und Pufferlänge und nutzt dieselbe Platzierung, Bild-ID-Vergabe und Speicherbegrenzung wie der Sixel-Decoder. Ein lokales Bild beginnt am Zeilenanfang, nach einer gegebenenfalls begonnenen Textzeile; Sixel-Modi bleiben erhalten. egui_term stellt die verfügbare Pixelbreite und die lokale Einfügefunktion bereit. Dateiauswahl, Ablagezuordnung, asynchrones Decodieren und Skalierung liegen im Hauptprogramm. Keine zusätzlichen Abhängigkeiten.
+
+## 0.9.1: Text unter dem Kontextmenü
+
+egui_term stellt die logische Textzeile unter einer Pixelposition samt UTF-8-Byteoffset bereit. Die Zuordnung berücksichtigt Scrollback, weiche Zeilenumbrüche und breite Zeichen. Pfaderkennung und das Festhalten des angeklickten Ziels liegen im Hauptprogramm.

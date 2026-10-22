@@ -211,7 +211,9 @@ Das Paket enthält Microsofts portable ConPTY-Version **1.25.260930003** (`conpt
 
 ## Lokale Bilder öffnen (0.9.0)
 
-Im gewünschten Terminalbereich **Rechtsklick → Bild anzeigen …** wählen oder eine lokale Bilddatei aus dem Explorer auf dessen Ausgabefläche ziehen. Bei Teilungen entscheidet die Ablageposition über den Zielbereich. PNG, JPEG, WebP und BMP werden unterstützt. Eine Textmarkierung ist dafür nicht nötig. Im Editor oder bei geöffneten App-Dialogen ist die Ablage deaktiviert.
+Im gewünschten Terminalbereich **Rechtsklick → Bild auswählen …** wählen oder eine lokale Bilddatei aus dem Explorer auf dessen Ausgabefläche ziehen. Bei Teilungen entscheidet die Ablageposition über den Zielbereich. PNG, JPEG, WebP und BMP werden unterstützt. Eine Textmarkierung ist dafür nicht nötig. Im Editor oder bei geöffneten App-Dialogen ist die Ablage deaktiviert.
+
+Seit 0.9.1 öffnet **Rechtsklick auf einen ausgegebenen Bilddateinamen → Bild öffnen** das erkannte Bild direkt. Der Tooltip zeigt den ermittelten Pfad. Relative Dateinamen gelten zum aktuellen lokalen Ordner des Bereichs; auch Namen mit Leerzeichen und Anführungszeichen werden berücksichtigt. Terminalausgabe ist unstrukturierter Text: abgeschnittene Namen, mehrdeutige Auflistungen oder ältere Ausgaben aus einem anderen Ordner können nicht zuverlässig zugeordnet werden. Dafür bleibt „Bild auswählen …“ verfügbar. In SSH-/WinRM-Bereichen ist das direkte Öffnen von Textpfaden deaktiviert; lokale Dateiauswahl und Ablage bleiben möglich.
 
 Das Bild erscheint an der aktuellen Ausgabeposition; eine bereits begonnene Textzeile wird vorher abgeschlossen. Große Bilder werden proportional auf die Terminalbreite und das Bildlimit verkleinert, kleine Bilder nicht vergrößert. Der gemeinsame Decoder begrenzt die längste Seite zunächst auf 2048 Pixel. Transparenz und volle RGB-Farben bleiben erhalten. Laufende Terminalprogramme können Bildbereiche später überschreiben oder löschen. Bei großen Bildern lässt sich der obere Teil über den Scrollback erreichen.
 

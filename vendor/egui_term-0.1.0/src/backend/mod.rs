@@ -287,6 +287,27 @@ impl TerminalBackend {
         self.term.lock().selection_to_string().unwrap_or_default()
     }
 
+    /// Logical text line under a pointer, with its UTF-8 byte offset.
+    pub fn text_at_pixel(&self, x: f32, y: f32) -> Option<(String, usize)> {
+        let term = self.term.lock();
+        let point = Self::selection_point(x, y, &self.size, term.grid().display_offset());
+        let first = term.line_search_left(point).line;
+        let last = term.line_search_right(point).line;
+        if last.0 - first.0 > 32 { return None; }
+        let mut text = String::new();
+        let mut offset = 0;
+        for row in first.0..=last.0 {
+            for col in 0..term.columns() {
+                let cell = &term.grid()[Line(row)][Column(col)];
+                if row == point.line.0 && col == point.column.0 { offset = text.len(); }
+                if cell.flags.contains(term::cell::Flags::WIDE_CHAR_SPACER) { continue; }
+                text.push(cell.c);
+                if let Some(extra) = cell.zerowidth() { text.extend(extra); }
+            }
+        }
+        Some((text, offset))
+    }
+
     /// Literal, case-sensitive search over the retained grid, including wrapped lines.
     pub fn set_search(&mut self, query: &str) -> std::result::Result<(), String> {
         self.search = None;

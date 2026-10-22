@@ -3,7 +3,63 @@ use std::{path::PathBuf, sync::mpsc};
 
 pub enum Request {
     Choose(u64),
+    Open(u64, PathBuf),
     Drop(u64, Vec<egui::DroppedFile>),
+}
+
+/// Resolve only a filename containing the clicked character, never execute text.
+pub fn path_at(text: &str, offset: usize, base: &std::path::Path) -> Option<PathBuf> {
+    if text.len() > 8192 || !text.is_char_boundary(offset) {
+        return None;
+    }
+    let lower = text.to_ascii_lowercase();
+    let mut fallback = None;
+    let mut checked = 0;
+    for extension in [".png", ".jpeg", ".jpg", ".webp", ".bmp"] {
+        for (pos, _) in lower.match_indices(extension) {
+            let end = pos + extension.len();
+            if offset >= end
+                || text[end..].chars().next().is_some_and(|c| {
+                    !c.is_whitespace() && !matches!(c, '\'' | '"' | ')' | ']' | ',' | ';')
+                })
+            {
+                continue;
+            }
+            let mut starts = vec![0];
+            for (i, c) in text[..end].char_indices() {
+                if c.is_whitespace() || matches!(c, '\'' | '"' | '(' | '[') {
+                    starts.push(i + c.len_utf8());
+                }
+            }
+            for start in starts.into_iter().filter(|start| *start <= offset) {
+                let candidate = &text[start..end];
+                if candidate.is_empty() || candidate.contains(['\n', '\r', '\t', '"']) {
+                    continue;
+                }
+                let path = PathBuf::from(candidate);
+                // Drive-relative paths and URI schemes are ambiguous; no expansion.
+                if candidate.contains("://") || (candidate.contains(':') && !path.is_absolute()) {
+                    continue;
+                }
+                let path = if path.is_absolute() {
+                    path
+                } else {
+                    base.join(path)
+                };
+                checked += 1;
+                if checked > 64 {
+                    return fallback;
+                }
+                if path.is_file() {
+                    return Some(path);
+                }
+                if fallback.is_none() && !candidate.contains(char::is_whitespace) {
+                    fallback = Some(path);
+                }
+            }
+        }
+    }
+    fallback
 }
 
 pub fn take_drop(ctx: &egui::Context, rect: egui::Rect) -> Vec<egui::DroppedFile> {
@@ -91,6 +147,47 @@ impl Loader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn clicked_image_paths_resolve_spaces_unicode_and_listing_columns() {
+        let base = std::env::temp_dir().join(format!("tv-paths-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        for name in [
+            "first.png",
+            "zweites Bild ä.jpg",
+            "Bild ä.jpg",
+            "O'Brien.PNG",
+        ] {
+            std::fs::write(base.join(name), []).unwrap();
+        }
+        let listing = "-a--- 21.10.2026 1234 zweites Bild ä.jpg";
+        assert_eq!(
+            path_at(listing, listing.find("Bild").unwrap(), &base),
+            Some(base.join("zweites Bild ä.jpg"))
+        );
+        let line = "first.png O'Brien.PNG";
+        assert_eq!(path_at(line, 2, &base), Some(base.join("first.png")));
+        assert_eq!(
+            path_at(line, line.find("Brien").unwrap(), &base),
+            Some(base.join("O'Brien.PNG"))
+        );
+        let absolute = format!("\"{}\"", base.join("zweites Bild ä.jpg").display());
+        assert_eq!(
+            path_at(&absolute, absolute.find("Bild").unwrap(), &base),
+            Some(base.join("zweites Bild ä.jpg"))
+        );
+        assert!(path_at("readme.txt", 1, &base).is_none());
+        assert!(path_at("first.png.exe", 1, &base).is_none());
+        assert!(path_at("https://example.org/a.png", 2, &base).is_none());
+        for name in [
+            "first.png",
+            "zweites Bild ä.jpg",
+            "Bild ä.jpg",
+            "O'Brien.PNG",
+        ] {
+            std::fs::remove_file(base.join(name)).unwrap();
+        }
+        std::fs::remove_dir(base).unwrap();
+    }
     #[test]
     fn background_loading_preserves_target_and_recovers_after_failure() {
         let ctx = egui::Context::default();

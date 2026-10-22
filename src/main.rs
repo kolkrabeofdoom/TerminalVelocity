@@ -973,8 +973,22 @@ fn draw_node(
                                     ui.painter().rect_stroke(response.rect.shrink(1.0), 2.0, Stroke::new(2.0, Color32::LIGHT_BLUE), egui::StrokeKind::Inside);
                                 }
                             }
+                            let image_target_id = response.id.with("clicked-image-path");
+                            if response.secondary_clicked() {
+                                let path = if pane.remote.is_none() {
+                                    response.interact_pointer_pos().and_then(|pos| backend.text_at_pixel(pos.x - response.rect.min.x, pos.y - response.rect.min.y))
+                                        .and_then(|(text, offset)| inline_image::path_at(&text, offset, &pane.directory))
+                                } else { None };
+                                ui.ctx().data_mut(|data| data.insert_temp(image_target_id, path));
+                            }
                             response.context_menu(|ui| {
-                                if ui.button("Bild anzeigen …").clicked() {
+                                let path = ui.ctx().data(|data| data.get_temp::<Option<PathBuf>>(image_target_id)).flatten();
+                                if ui.add_enabled(path.is_some(), egui::Button::new("Bild öffnen"))
+                                    .on_hover_text(path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "Rechtsklick auf einen lokalen Bilddateipfad. Remote-Pfade werden nicht lokal geöffnet.".into())).clicked() {
+                                    *image_request = path.map(|path| inline_image::Request::Open(pane.id, path));
+                                    ui.close_menu();
+                                }
+                                if ui.button("Bild auswählen …").clicked() {
                                     *image_request = Some(inline_image::Request::Choose(pane.id));
                                     ui.close_menu();
                                 }
@@ -1304,6 +1318,7 @@ impl eframe::App for TerminalApp {
             });
         if let Some(request) = image_request {
             let (id, path) = match request {
+                inline_image::Request::Open(id, path) => (id, Ok(Some(path))),
                 inline_image::Request::Choose(id) => (
                     id,
                     background::choose_image_file(dialog_owner, "Bild im Terminal anzeigen"),

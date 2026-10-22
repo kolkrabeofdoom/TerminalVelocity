@@ -59,7 +59,7 @@ fn conpty_backend_uploads_and_paints_sixel_texture() {
     let mut backend = TerminalBackend::new(4242, context.clone(), sender, BackendSettings {
         shell: "pwsh.exe".into(),
         args: vec!["-NoLogo".into(), "-NoProfile".into(), "-Command".into(),
-            "Start-Sleep -Seconds 2; [Console]::Write(\"`eP0;1q`\"1;1;12;6#1;2;100;0;0#1!12~`e\\\"); Start-Sleep -Seconds 2".into()],
+            "Start-Sleep -Seconds 2; [Console]::WriteLine('Bild_ä.png'); [Console]::Write(\"`eP0;1q`\"1;1;12;6#1;2;100;0;0#1!12~`e\\\"); Start-Sleep -Seconds 2".into()],
         working_directory: None,
     }).unwrap();
     let frame = |backend: &mut TerminalBackend| {
@@ -86,6 +86,10 @@ fn conpty_backend_uploads_and_paints_sixel_texture() {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert_eq!(backend.sixel_status(), (1, 0));
+    let cell_width = backend.last_content().terminal_size.cell_width as f32;
+    let (line, offset) = backend.text_at_pixel(7.0 * cell_width, 0.0).unwrap();
+    assert!(line.starts_with("Bild_ä.png"), "{line:?}");
+    assert_eq!(&line[offset..offset + 1], "p");
     let output = frame(&mut backend);
     let (texture_id, delta) = output
         .textures_delta

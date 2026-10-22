@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.9.1 – 22. Oktober 2026
+
+- „Bild öffnen“ im Kontextmenü verwendet den angeklickten lokalen Bildpfad direkt, ohne Windows-Dateidialog.
+- „Bild auswählen …“ bleibt eine separate Aktion mit Dateiauswahl.
+- Erkennung relativer/absoluter Pfade, Dateinamen mit Leerzeichen/Unicode und umgebrochener Terminalzeilen; der beim Rechtsklick ermittelte Pfad bleibt während der Menübedienung fest.
+- Remote-Bereiche öffnen angeklickte Pfade nicht als lokale Dateien. Relative Pfade gelten zum aktuellen lokalen Sitzungsordner.
+
 ## 0.9.0 – 21. Oktober 2026
 
 - „Bild anzeigen …“ im Terminal-Kontextmenü und Drag-and-drop einer lokalen Bilddatei auf den gewünschten Bereich.
