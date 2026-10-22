@@ -1,91 +1,238 @@
 # TerminalVelocity
 
-Windows-Terminal mit Tabs, teilbaren Bereichen und integrierten Startprofilen für KI-CLIs. Stand: **0.7.0**.
+TerminalVelocity ist ein Windows-Terminal mit Tabs, geteilten Ansichten, SSH- und WinRM-Verbindungen, einem lokalen Texteditor und Bildanzeige. Vorhandene KI-Kommandozeilenprogramme lassen sich als eigene Sitzungen starten; markierte Terminalausgaben können nach Prüfung an sie übergeben werden.
 
-## Funktionen
+**Version 0.9.2 · Windows x64 · MIT-Lizenz**
 
-- PowerShell 7, CMD und optional Git Bash.
-- Codex CLI, Claude Code, Gemini CLI und OpenAI API CLI als eigene Terminalbereiche.
-- Neue Tabs und Teilungen übernehmen den aktuellen Projektordner des aktiven Bereichs. PowerShell, CMD und Git Bash melden Verzeichniswechsel an jedem Prompt.
-- **Sitzung neu starten** direkt im Bereich: gleicher Anbieter und Projektordner, frischer Prozess und leere Ausgabe. Laufende Sitzungen erfordern vorher eine Bestätigung.
-- Markierten Text per Kontextmenü an eine KI übergeben: Anbieter, Projektordner und Text vor dem Senden bearbeiten; die KI öffnet in einem neuen Tab.
-- KI-Schnellaktionen im Kontextmenü: **Fehler erklären**, **Lösung vorschlagen**, **Befehl erklären** und **Ausgabe zusammenfassen** bereiten einen bearbeitbaren Entwurf vor.
-- Benannte Projektprofile speichern Tabs, Teilungen, Anbieter und Ordner als Vorlage und öffnen sie als neue Sitzungen in zusätzlichen Tabs.
-- Wörtliche Suche im Terminalverlauf mit **Strg+F**, hervorgehobenen Treffern und Vor-/Rückwärtssuche.
-- Windows-Fenstertransparenz mit einstellbarer Deckkraft. Im standardmäßig aktiven Kompatibilitätsmodus werden auch Schrift und Bedienelemente durchsichtig. Alternativ Hintergrundtransparenz mit optionalem Acryl, abhängig vom Grafiktreiber.
-- Layout, Anbieter, zuletzt gemeldete Ordner und Darstellung werden lokal in `workspace.json` neben der EXE gespeichert.
+[Download und Release Notes](https://github.com/kolkrabeofdoom/TerminalVelocity/releases/latest) · [Änderungsverlauf](CHANGELOG.md) · [Prüfbericht](VERIFICATION.md)
 
-Die Anwendung startet vorhandene Anbieter-CLIs. Anmeldung, Abrechnung und Bestätigungen erfolgen beim jeweiligen Anbieter. Vorhandene Terminalausgaben werden nicht automatisch an einen Anbieter gesendet. Ein Neustart öffnet eine neue CLI-Sitzung; er setzt keinen KI-Chat automatisch fort.
+## Inhalt
 
-## Bauen
+- [Installation und erster Start](#installation-und-erster-start)
+- [Tabs, Bereiche und Arbeitsordner](#tabs-bereiche-und-arbeitsordner)
+- [Terminalbedienung und Suche](#terminalbedienung-und-suche)
+- [Shells und KI-Programme](#shells-und-ki-programme)
+- [Text an eine KI übergeben](#text-an-eine-ki-übergeben)
+- [SSH und PowerShell-Remoting](#ssh-und-powershell-remoting)
+- [Projektprofile und Workspace](#projektprofile-und-workspace)
+- [Lokaler Texteditor](#lokaler-texteditor)
+- [Bilder im Terminal](#bilder-im-terminal)
+- [Darstellung und Grafikeffekte](#darstellung-und-grafikeffekte)
+- [Tastenkürzel](#tastenkürzel)
+- [Gespeicherte Daten](#gespeicherte-daten)
+- [Bekannte Grenzen](#bekannte-grenzen)
+- [Aus den Quellen bauen](#aus-den-quellen-bauen)
+- [Tests und Paketierung](#tests-und-paketierung)
+- [Technik und Lizenzen](#technik-und-lizenzen)
 
-Voraussetzungen: Windows x64, Rust Stable sowie entweder Microsoft C++ Build Tools mit Windows SDK (MSVC-Target) oder eine passende GNU-Linker-Toolchain.
+## Installation und erster Start
+
+1. Das Windows-x64-ZIP auf der [Release-Seite](https://github.com/kolkrabeofdoom/TerminalVelocity/releases/latest) herunterladen.
+2. Den gesamten Inhalt in einen beschreibbaren Ordner entpacken.
+3. `TerminalVelocity.exe` im entpackten Ordner starten.
+4. Oben eine Shell auswählen und mit **+ Tab** eine Sitzung öffnen. **Einstellungen** zeigt erkannte Programme und erlaubt eigene Programmpfade.
+
+Das Paket enthält PowerShell **7.6.7**, die portable Microsoft-ConPTY-Laufzeit **1.25.260930003**, das Git-Bash-Startskript und eine Sixel-Demo. `conpty.dll` und `OpenConsole.exe` müssen neben der Terminal-EXE bleiben. Es ist kein Installer erforderlich; Windows-Systemdateien werden nicht ersetzt.
+
+CMD stammt aus Windows. Git Bash, OpenSSH und KI-CLIs müssen bei Bedarf separat installiert sein. Zugangsdaten und persönliche Konfigurationen sind nicht enthalten. Windows PowerShell 5.1 wird nicht als Ersatz für PowerShell 7 verwendet.
+
+TerminalVelocity benötigt Windows x64 mit Pseudoterminal-Unterstützung und einen Grafiktreiber für den OpenGL-Renderer. Geprüft werden der lokale Windows-Build und ein Windows-Server-2022-CI-Ablauf; eine vollständige Kompatibilitätsmatrix für Windows-Versionen und Grafiktreiber liegt nicht vor.
+
+### Aktualisieren
+
+Die neue Version in einen eigenen Ordner entpacken. Für die bisherigen Einstellungen `workspace.json` und gegebenenfalls `profiles.json` aus dem alten Programmordner übernehmen. Relative Programm- und Hintergrundbildpfade beziehen sich auf den neuen Programmordner und müssen dort weiterhin stimmen. Die Anwendung vor dem Kopieren der Einstellungen schließen.
+
+## Tabs, Bereiche und Arbeitsordner
+
+**+ Tab** startet das oben ausgewählte Programm in einem neuen Tab. **Nebeneinander** und **Untereinander** teilen den aktiven Bereich. Teilungen können verschachtelt und ihre Trennlinien mit der Maus verschoben werden. Ein Klick aktiviert einen Bereich; seine Umrandung kennzeichnet den Fokus.
+
+Neue lokale Tabs und Teilungen übernehmen den zuletzt gemeldeten Arbeitsordner des aktiven Bereichs. PowerShell, CMD und Git Bash melden Verzeichniswechsel am Prompt. Die Bereichsüberschrift zeigt diesen Ordner. Für Sitzungen ohne Shell-Prompt, etwa direkt gestartete KI-CLIs, bleibt der geerbte Startordner maßgeblich. Unter **Einstellungen → Startordner ohne aktiven Bereich** lässt sich der Rückfallordner festlegen.
+
+**Sitzung neu starten** beendet den bisherigen Prozess und startet dasselbe Programm im übernommenen Ordner neu. Die Ausgabe dieses Bereichs wird geleert; andere Bereiche laufen weiter. Bei einer noch laufenden Sitzung wird vorher nachgefragt. Ein fehlender Startordner führt zu einer Fehlermeldung.
+
+Mit **×** im Bereichskopf wird der Bereich geschlossen. Dabei endet auch seine Sitzung. Die Anwendung unterstützt insgesamt bis zu **32 Tabs und 64 Bereiche**.
+
+## Terminalbedienung und Suche
+
+Das Terminal verarbeitet Text, ANSI-Farben und Steuersequenzen. Konsolenprogramme können den alternativen Bildschirm und Mausberichte verwenden. Der Textverlauf umfasst bis zu **10.000 zusätzliche Zeilen je Bereich**.
+
+- Mit der Maus ziehen, um Text zu markieren; Doppelklick wählt ein Wort beziehungsweise einen zusammengehörigen Textabschnitt, Dreifachklick eine Zeile.
+- In Programmen mit eigener Maussteuerung beim Markieren **Umschalt** gedrückt halten.
+- **Strg+Umschalt+C** kopiert die Auswahl, **Strg+Umschalt+V** fügt Text ein. Kopieren ist auch im Kontextmenü verfügbar.
+- Das Mausrad scrollt im Verlauf. Erkannte Textlinks können mit **Strg+Klick** geöffnet werden.
+
+### Verlauf durchsuchen
+
+**Strg+F** oder **Suchen** durchsucht den Verlauf des aktiven Bereichs. Die Suche ist wörtlich und beachtet Groß- und Kleinschreibung; reguläre Ausdrücke werden nicht ausgewertet. Auch weich umgebrochene Textzeilen werden berücksichtigt.
+
+Treffer erscheinen gelb, der aktuelle Treffer orange. **Enter / Weiter** und **Umschalt+Enter / Zurück** wechseln zwischen den Treffern; nach dem letzten folgt wieder der erste. Ältere Treffer werden in die Ansicht gescrollt. **Escape** schließt die Suche und erhält die erreichte Scrollposition.
+
+Neue Ausgabe wird während der Suche berücksichtigt. Beim Bereichswechsel oder Öffnen eines Dialogs wird die Suche geschlossen. Suchtexte werden nicht gespeichert oder an die Shell gesendet. Grenzen: **256 Zeichen Suchtext**, **10.000 Treffer**; ein `+` im Zähler zeigt weitere Treffer an. Bereits aus dem Verlauf entfernte Zeilen und Bildinhalte sind nicht durchsuchbar.
+
+## Shells und KI-Programme
+
+| Eintrag | Verwendung und Voraussetzung |
+| --- | --- |
+| PowerShell 7 | Lokale Shell; im Download-Paket enthalten. |
+| CMD | Windows-Eingabeaufforderung. |
+| Git Bash | Bash aus einer vorhandenen Git-for-Windows-Installation. |
+| Codex CLI | Separat installierte und eingerichtete CLI. |
+| Claude Code | Separat installierte und eingerichtete CLI. |
+| Gemini CLI | Separat installierte und eingerichtete CLI. |
+| OpenAI API CLI | Vorhandenes `openai.exe`; für die Textübergabe sind Modell-ID und eingerichteter API-Zugang erforderlich. |
+
+Unter **Einstellungen → Shells und KI-CLIs** werden gefundene Programme angezeigt. Leere Felder verwenden die automatische Suche; alternativ vollständige EXE-/CMD-Pfade oder Pfade relativ zum Programmordner eintragen. Für OpenSSH gibt es ein eigenes Feld. **Speichern und fehlgeschlagene Sitzungen neu starten** übernimmt die Einstellungen und versucht zuvor fehlgeschlagene Starts erneut. Laufende Sitzungen bleiben aktiv; geänderte Pfade gelten für neue Starts.
+
+TerminalVelocity startet die jeweiligen Programme. Anmeldung, Kosten, Werkzeugberechtigungen und Bestätigungen werden von ihnen geregelt. Ein Sitzungsneustart stellt keinen vorhandenen KI-Chat wieder her.
+
+## Text an eine KI übergeben
+
+1. Terminaltext markieren.
+2. Im Kontextmenü **An KI übergeben …** wählen.
+3. Im Entwurf Anbieter, lokalen Projektordner und Text prüfen oder bearbeiten.
+4. Mit **Senden und KI-Tab öffnen** eine neue Sitzung starten.
+
+Die Schnellaktionen **Fehler erklären**, **Lösung vorschlagen**, **Befehl erklären** und **Ausgabe zusammenfassen** ergänzen eine deutsche Anweisung. Auch diese Entwürfe werden erst nach dem Senden übergeben. Ohne Textauswahl sind die Aktionen deaktiviert.
+
+Auswahl und Zeilenumbrüche bleiben erhalten. Der vollständige Entwurf ist auf **10.000 UTF-16-Zeicheneinheiten** begrenzt. Die Übergabe erfolgt als Programmargument, nicht als auszuführender Shell-Befehl. **Abbrechen** verwirft den Dialog; Entwürfe werden nicht im Workspace gespeichert.
+
+Die Schnellaktionen bitten um Erklärungen oder Vorschläge ohne Befehlsausführung. Das ist eine Anweisung an die CLI, keine technische Beschränkung ihrer Werkzeuge. Erst die ausdrücklich bestätigte Übergabe sendet die Auswahl an die gestartete Anbieter-CLI. Auch bei markierter Remote-Ausgabe läuft diese KI-Sitzung lokal.
+
+## SSH und PowerShell-Remoting
+
+**Verbinden …** öffnet den Verbindungsdialog. Verbindungen können in einem neuen Tab, neben oder unter dem aktiven Bereich starten. Einträge enthalten Name, Host, optionales Konto und optionalen Port. **Verbindung speichern** legt ein Profil an; Favoriten erscheinen zuerst. Profile lassen sich bearbeiten und nach Bestätigung löschen. **Verbinden** funktioniert auch ohne vorheriges Speichern.
+
+### SSH
+
+TerminalVelocity startet `ssh.exe` mit getrennten Argumenten. Bei leerem Konto oder Port gelten die Einstellungen des OpenSSH-Clients. Hostaliase, SSH-Agent, `IdentityFile` und `ProxyJump` werden durch dessen Konfiguration verarbeitet. Zusätzlich lässt sich im Dialog ein absoluter Schlüsseldateipfad angeben.
+
+Hostschlüsselprüfung und Anmeldung finden im Terminal statt. Die Anwendung speichert weder Kennwörter noch private Schlüssel. Der SSH-Client muss installiert oder über einen eigenen Programmpfad erreichbar sein.
+
+### PowerShell über WinRM
+
+PowerShell 7 startet `Enter-PSSession`. Ohne Kontoeintrag wird die aktuelle Windows-Identität verwendet; andernfalls fragt PowerShell interaktiv nach dem Kennwort. HTTPS, Port und ein PowerShell-Konfigurationsendpunkt sind optional.
+
+Der Server muss bereits für Remoting eingerichtet sein. TerminalVelocity ändert keine Serverkonfiguration, Zertifikate oder TrustedHosts-Einträge. PowerShell-Remoting über SSH ist derzeit nicht implementiert.
+
+### Verbindungsende und Wiederherstellung
+
+**Neu verbinden** startet eine neue Verbindung. Solange die alte Sitzung läuft, ist eine Bestätigung erforderlich. Nach Verbindungsende bleibt die Ausgabe sichtbar. Der WinRM-Host beendet sich beim Rückfall in den lokalen Prompt, damit unter der Remote-Überschrift keine lokale Shell weiterläuft.
+
+Remote-Ausgaben ändern den lokalen Startordner nicht. Entfernte Arbeitsordner werden nicht nachgeführt. Verbindungsprofile werden im Workspace gespeichert; maximal **128 Profile** sind möglich. Offene Bereiche und Projektprofile besitzen eigene Kopien. Änderungen an einem Favoriten ändern diese Kopien nicht.
+
+Beim Wiederherstellen des Workspace oder Öffnen eines Projektprofils werden darin enthaltene Remote-Verbindungen neu aufgebaut. Bestehende Prozesse oder Remote-Sitzungen werden nicht fortgesetzt. Dateitransfer und eine eigene Tunnelverwaltung sind nicht enthalten.
+
+## Projektprofile und Workspace
+
+Der **Workspace** beschreibt den zuletzt verwendeten Aufbau. **Workspace speichern** sichert ihn ausdrücklich; beim normalen Beenden wird er ebenfalls gespeichert. Beim nächsten Start werden Tabs und Bereiche mit neuen Prozessen aufgebaut. Ausgabe, Prozesse und KI-Chats werden nicht wiederhergestellt.
+
+Ein **Projektprofil** ist eine benannte Vorlage für Tabs, Teilungen, Programme, Verbindungen und Bereichsordner:
+
+1. Den gewünschten Aufbau herstellen und **Projekt speichern …** wählen.
+2. Namen und vollständigen Projektordner eintragen, dann **Profil speichern**.
+3. Später über **Projekt öffnen** das Profil auswählen und die Vorschau prüfen.
+4. Mit **Projekt in neuen Tabs öffnen** neue Sitzungen starten. Bereits offene Tabs bleiben erhalten.
+
+Bei einem geänderten Projektordner ziehen Bereiche innerhalb des ursprünglichen Ordners einschließlich Unterordnern mit um. Externe Ordner bleiben unverändert. Fehlende Ordner oder Programme werden vor dem Start gemeldet. Darstellung und Programmpfade bleiben globale Einstellungen.
+
+Bis zu **32 Projektprofile** mit Namen von **1 bis 80 Zeichen** sind möglich. **Profil löschen …** entfernt eine Vorlage nach Bestätigung. Zum Ersetzen eines Profils einen neuen Namen verwenden oder die alte Vorlage zuerst löschen. Fehlerhafte Profildateien werden gemeldet und nicht automatisch überschrieben.
+
+## Lokaler Texteditor
+
+**Editor** öffnet einen eigenen Tab für ein Dokument. Die Terminalprozesse laufen währenddessen weiter. **Neu**, **Öffnen …**, **Speichern**, **Speichern unter …** und **Editor schließen** stehen in der Editorleiste bereit. Der Dateidialog startet im lokalen Ordner des aktiven Terminalbereichs.
+
+Der Editor bietet Zeilennummern, horizontales und vertikales Scrollen, Einrückung mit Tab, Undo/Redo und eine wörtliche, groß-/kleinschreibungssensitive Suche. **Nächster Treffer** markiert den gefundenen Text. Einfache Syntaxfarben werden anhand der Endung für PowerShell, Bash, JSON, TOML und Markdown gewählt.
+
+Ein Stern am Dokumentnamen zeigt ungespeicherte Änderungen. Beim Ersetzen, Schließen oder normalen Beenden kann gespeichert, verworfen oder abgebrochen werden. Der Wechsel zu einem Terminaltab erhält den Entwurf im Arbeitsspeicher. **Workspace speichern** speichert nicht den Editorinhalt.
+
+Unterstützt werden **UTF-8 mit oder ohne BOM**, einheitliche **LF- oder CRLF-Zeilenenden** und Dateien bis **256 KiB**. Neue Dateien verwenden UTF-8 ohne BOM und LF. Andere Kodierungen, Binärdateien und gemischte Zeilenenden werden abgewiesen. Bestehende Kodierungs- und Zeilenendeneigenschaften bleiben beim Speichern erhalten.
+
+Speichern erfolgt über eine temporäre Datei und atomaren Austausch. Externe Inhaltsänderungen, gelöschte Quelldateien oder Schreibschutz stoppen den Vorgang. Ein eigener Entwurf kann dann unter anderem Namen gespeichert werden. Es gibt keine automatische Wiederherstellung nach einem erzwungenen Prozessabbruch, keinen Sprachserver, keine Markdown-Vorschau und keine Remote-Dateibearbeitung. Der Editor führt keine Skripte aus.
+
+## Bilder im Terminal
+
+Unter **Einstellungen → Bilder im Terminal anzeigen (Sixel und lokale Dateien)** lässt sich die Bildanzeige gemeinsam ein- oder ausschalten. Abschalten entfernt die gespeicherten Terminalbilder. Ein Bild ist Terminalinhalt und vom dekorativen Hintergrundbild unabhängig.
+
+### Lokale Bilder
+
+Drei Wege stehen zur Verfügung:
+
+- **Rechtsklick auf einen ausgegebenen Bilddateinamen → Bild öffnen** zeigt den erkannten lokalen Pfad direkt an. Der Tooltip nennt den ermittelten Pfad.
+- **Rechtsklick → Bild auswählen …** öffnet den Windows-Dateidialog.
+- Eine einzelne Bilddatei aus dem Explorer auf die Ausgabefläche eines Bereichs ziehen. Die Ablageposition bestimmt den Zielbereich.
+
+Unterstützt werden **PNG, JPEG, WebP und BMP**. Die Datei wird im Hintergrund geladen und direkt als RGBA angezeigt; ein Sixel-Konverter ist dafür nicht nötig. Große Bilder werden proportional verkleinert, kleine nicht vergrößert. Transparenz bleibt erhalten. Animierte Dateien werden nicht als Animation wiedergegeben.
+
+Das Bild erscheint an der aktuellen Ausgabeposition; eine begonnene Textzeile wird vorher abgeschlossen. Bilder scrollen mit dem Verlauf. Laufende Programme können Bildbereiche später überschreiben oder löschen. Bei hohen Bildern ist der obere Teil über den Scrollback erreichbar.
+
+Relative angeklickte Pfade gelten zum aktuellen lokalen Sitzungsordner. Terminaltext enthält keine verlässlichen Dateimetadaten: abgeschnittene Namen, mehrdeutige Auflistungen und ältere Ausgaben aus anderen Ordnern können falsch oder gar nicht zugeordnet werden. Hier hilft die separate Dateiauswahl. In SSH-/WinRM-Bereichen ist direktes Öffnen von Textpfaden deaktiviert; lokale Auswahl und Ablage bleiben möglich. Es erfolgt kein Upload an die Gegenstelle.
+
+Es wird jeweils eine Datei geladen. Wird die Zielsitzung geschlossen oder neu gestartet oder ihre Breite während des Ladens geändert, wird das Ergebnis verworfen. Fehler stehen in der Statusleiste. Im Editor und bei geöffneten App-Dialogen ist die Ablage deaktiviert.
+
+### Sixel-Ausgabe aus Programmen
+
+Ein Programm kann Bilder als Sixel-Escape-Sequenzen ausgeben, auch über eine SSH-Sitzung. TerminalVelocity decodiert diese Daten und zeichnet das Bild zwischen den Textzeilen. Zum lokalen Ausprobieren im PowerShell-Tab aus dem entpackten Programmordner:
 
 ```powershell
-cargo test --locked
-cargo build --release --locked
+& .\shells\sixel-demo.ps1
 ```
 
-Alternativ: `./scripts/build.ps1` (kopiert auch das für Git Bash benötigte Startskript neben die EXE). Das ausführbare Programm liegt anschließend unter `target/release/TerminalVelocity.exe`.
+Die Demo erzeugt ein 240 × 120 Pixel großes Farbmuster und schreibt danach darunter weiter. Sie benötigt keine zusätzlichen Programme und kein Netzwerk.
 
-PowerShell 7 muss im PATH, unter `C:\Program Files\PowerShell\7` oder portabel unter `shells/powershell/pwsh.exe` neben der EXE liegen. Die ältere Windows PowerShell 5.1 wird nicht als Ersatz verwendet. Unter **Einstellungen → Shells und KI-CLIs** können EXE- und CMD-Pfade explizit angegeben werden; relative Pfade gelten zum Programmordner.
+Unterstützt werden 256 Farbregister, RGB/HLS-Farbangaben, Wiederholungen, Rasterabmessungen, Pixelseitenverhältnis, transparente beziehungsweise gefüllte Hintergründe, Grafikfähigkeits- und Zellgrößenabfragen sowie DEC-Modi 80 und 1070. Haupt- und Alternativbildschirm besitzen getrennte Bildbestände. Textüberschreiben und Löschbefehle entfernen betroffene Segmente.
 
-## Portables Paket erstellen
+Die mitgelieferte ConPTY-Laufzeit ist für den Transport wichtig: Ältere Windows-Systemversionen können Sixel-Sequenzen entfernen. Die Implementierung ist keine vollständige VT340-Emulation und unterstützt nicht das Kitty-Grafikprotokoll.
 
-```powershell
-./scripts/package.ps1
-```
+### Bildgrenzen
 
-Das Skript baut das Projekt, lädt die in `shells/powershell-source.json` festgeschriebene offizielle PowerShell-Version herunter, prüft SHA256 und erstellt `dist/TerminalVelocity-0.7.0-Windows-x64.zip`. Mit `-SkipBuild` lässt sich ein bereits gebautes Release verpacken. Bereits installierte KI-CLIs werden automatisch gesucht; sie werden nicht in das Paket kopiert.
+| Gegenstand | Grenze oder Verhalten |
+| --- | --- |
+| Lokale Quelldatei | 32 MiB, 16 Megapixel, höchstens 16384 Pixel je Seite |
+| Lokales Bild nach Decodierung | Zunächst höchstens 2048 Pixel je Seite, danach Verkleinerung auf Terminalbreite und Bildlimit |
+| Einzelnes gespeichertes Terminalbild | Höchstens 4096 Pixel je Seite und 2 Megapixel |
+| Einzelne Sixel-Sequenz | Höchstens 4 MiB Eingabedaten |
+| Bildbestand je Bildschirm | 16 MiB unkomprimierte Bilddaten, 32 Bilder und 4096 Zeilensegmente; ältere Bilder werden bei Bedarf entfernt |
+| Fenster-, Layout- oder Schriftgrößenänderung | Vorhandene Terminalbilder werden gelöscht |
+| Zeichen einfügen/löschen | Betroffene Bildsegmente ab der Position werden entfernt |
 
-Dieses Repository enthält die Quellen und die angepasste Terminalbibliothek. Kompilate, heruntergeladene Laufzeiten, Zugangsdaten, lokale Einstellungen und Testausgaben sind ausgeschlossen.
+Terminalbilder werden nicht kopiert, durchsucht oder im Workspace gespeichert. Zoom, Bildexport und ein eigener Bildanzeigebefehl sind noch nicht vorhanden.
 
-## Eigene Hintergrundbilder (0.5.0)
+## Darstellung und Grafikeffekte
 
-Unter **Einstellungen → Eigenes Hintergrundbild**:
+### Schrift und Transparenz
 
-1. **Datei auswählen …** öffnet den Windows-Dateidialog. Alternativ einen Pfad einfügen und **Laden / neu laden** wählen.
-2. **Abdunklung** von 0 % (unverändert) bis 100 % (schwarz) einstellen; Standard ist 70 %.
-3. **Ausfüllen** füllt den Terminalbereich mit mittigem Zuschnitt. **Einpassen** zeigt das ganze Bild mit freien Rändern. Das Seitenverhältnis bleibt erhalten.
-4. **Hintergrundbild anzeigen** schaltet das Bild aus, ohne den Pfad zu vergessen. **Entfernen** entfernt nur die Zuordnung; die Bilddatei bleibt erhalten.
+Die Schriftgröße lässt sich zwischen **10 und 28** einstellen. Wenn vorhanden, wird Consolas geladen; ansonsten greift die Schriftkonfiguration des Renderers.
 
-PNG, JPEG, WebP und BMP werden unterstützt. Das Bild liegt je Bereich hinter Text, Auswahl, Suche und den optionalen Grafikeffekten. Wer ausschließlich das Foto sehen möchte, stellt das Effekt-Preset auf **Aus**. Bild und Effekt-Preset sind unabhängig. Einstellungen werden im Workspace gespeichert; Projektprofile verwenden die globalen Darstellungseinstellungen.
+**Kompatible Fenstertransparenz** verwendet die Windows-Fensterdeckkraft. Dabei werden auch Text und Bedienelemente transparent. Bei abgeschaltetem Kompatibilitätsmodus betrifft die Transparenz die Hintergrundflächen und hängt von der Grafiktreiberunterstützung ab. **Hintergrund weichzeichnen (Windows-Acryl)** ist für diesen Modus optional. Standardmäßig ist der Kompatibilitätsmodus aktiv.
 
-Das Laden erfolgt über einen Hintergrundprozess mit maximal einem gleichzeitigen Auftrag. Die fertige GPU-Textur wird von allen Bereichen gemeinsam verwendet. Fehler werden in den Einstellungen angezeigt; beschädigte/fehlende Dateien werden nicht bei jedem Bildaufbau erneut geladen. **Laden / neu laden** liest eine inzwischen geänderte Datei erneut.
+### Effekt-Presets
 
-Grenzen: 32 MiB Dateigröße, 16 Megapixel, maximal 16384 Pixel pro Seite. Für die Anzeige werden große Bilder proportional auf maximal 2048 Pixel pro Seite reduziert. Animierte WebP-Dateien werden als Standbild behandelt. Gespeichert wird ausschließlich der Pfad; relative Pfade gelten zum Programmordner. Wird die Datei verschoben oder entfernt, muss der Pfad neu gewählt werden.
+| Preset | Darstellung |
+| --- | --- |
+| Aus | Keine dekorativen Grafikeffekte |
+| Aurora | Türkis-violette Lichtbänder |
+| Phosphor | Scanlines und grüne oder bernsteinfarbene Standardschrift |
+| Deep Space | Sternpartikel |
 
-## Grafikeffekte (0.4.0)
+**Effektstärke** steuert die Hintergründe und das Cursor-Leuchten. **Animationen** schaltet Bewegung ab; die Hintergrundgestaltung bleibt statisch. **Cursor-Schweif** lässt sich gesondert deaktivieren. Animationen laufen nur im aktiven Bereich bei fokussiertem Fenster. ANSI-Farben, Auswahl und Suchmarkierungen bleiben erhalten. Voreinstellung ist Aurora mit 45 % Stärke.
 
-Unter **Einstellungen → Grafikeffekte** stehen **Aurora**, **Phosphor** und **Deep Space** sowie **Aus** bereit. Aurora zeigt langsam bewegte türkis-violette Lichtbänder. Phosphor bietet dezente Scanlines und eine grüne oder bernsteinfarbene Standardschrift. Deep Space zeigt langsam wandernde Sterne. ANSI-Farben, Suchmarkierungen und Auswahl bleiben erhalten.
+Im Phosphor-Preset kann **Text-Nachleuchten** neue und veränderte Zeichen kurz hervorheben. **Leuchtstärke** und **Nachleuchtdauer** sind einstellbar; Standard sind 50 % und 0,6 Sekunden, der Dauerbereich liegt bei 0,1 bis 1,5 Sekunden. Gelöschte Zeichen hinterlassen keine Textreste. Bei Auswahl, Suchtreffern, Fokusverlust oder deaktivierten Animationen wird der Effekt unterdrückt. Scroll- und Layoutänderungen setzen ihn zurück.
 
-Der Regler **Effektstärke** steuert die dekorativen Hintergründe und das Cursor-Leuchten. **Animationen** schaltet Bewegung und Cursor-Schweif aus; die Hintergrundgestaltung bleibt statisch. **Cursor-Schweif** lässt sich zusätzlich separat abschalten. Aurora mit 45 % Intensität ist die Voreinstellung. Einstellungen werden mit dem Workspace gespeichert; Projektprofile behalten die globalen Darstellungseinstellungen.
+Das sind eingebaute egui/OpenGL-Effekte. Kitty-Shaderdateien können nicht importiert werden.
 
-Hintergründe werden hinter Terminalzellen gezeichnet, auf den jeweiligen Bereich begrenzt und nur im fokussierten aktiven Bereich animiert (20 angeforderte Hintergrundbilder pro Sekunde). Der Schweif umfasst maximal zwölf Spuren, klingt innerhalb von 0,32 Sekunden ab und wird bei Scrollen, Fokusverlust oder Layoutänderungen gelöscht. Inaktive Bereiche bleiben statisch. Das sind native egui/OpenGL-Effekte; Kitty-Shaderdateien lassen sich damit nicht importieren. Text-Nachleuchten steht seit 0.6.0 bereit; eigene Bilder seit 0.5.0.
+### Eigene Hintergrundbilder
 
-## Remote-Verbindungen (0.3.0)
+Unter **Einstellungen → Eigenes Hintergrundbild** eine Datei auswählen oder einen Pfad eingeben und **Laden / neu laden** wählen. **Abdunklung** reicht von 0 % bis 100 %, Standard sind 70 %.
 
-Über **Verbinden …** lassen sich SSH- und PowerShell/WinRM-Sitzungen in einem neuen Tab oder neben/unter dem aktiven Bereich öffnen. Ein Profil enthält Name, Host, optionales Konto und optionalen Port. Mit **Verbindung speichern** wird es lokal gespeichert; Favoriten stehen oben. Bestehende Profile lassen sich auswählen, ändern und erneut speichern oder nach Bestätigung löschen. **Verbinden** öffnet auch eine noch nicht gespeicherte Verbindung.
+**Ausfüllen** nutzt einen mittigen Zuschnitt, **Einpassen** zeigt das ganze Bild mit freien Rändern. Das Seitenverhältnis bleibt erhalten. **Hintergrundbild anzeigen** schaltet die Darstellung aus, ohne den Pfad zu vergessen. **Entfernen** löscht nur die Zuordnung, nicht die Datei.
 
-- **SSH:** OpenSSH `ssh.exe` wird direkt mit getrennten Argumenten gestartet. Ein leerer Port beziehungsweise ein leeres Konto lässt die vorhandene SSH-Konfiguration entscheiden. Hostaliase, SSH-Agent, `IdentityFile` und `ProxyJump` werden vom Client verarbeitet. Optional kann ein absoluter Schlüsselpfad angegeben werden. Hostschlüsselprüfung und Anmeldung erfolgen im Terminal. Ein eigener SSH-Programmpfad lässt sich in den Einstellungen setzen.
-- **PowerShell / WinRM:** PowerShell 7 startet `Enter-PSSession`. Ohne Konto wird die aktuelle Windows-Identität verwendet; bei angegebenem Konto fragt PowerShell interaktiv nach dem Kennwort. HTTPS, Port und ein PowerShell-Konfigurationsendpunkt sind optional. Der Zielserver benötigt eine bereits eingerichtete Remoting-Konfiguration. Die Anwendung verändert keine Server-, Zertifikats- oder TrustedHosts-Einstellungen.
-- Bereichsüberschriften zeigen Protokoll und Ziel. **Neu verbinden** startet eine frische Verbindung und leert die Ausgabe erst nach dem bewussten Neustart; solange der Prozess noch läuft, ist eine Bestätigung nötig. Nach Verbindungsende bleibt die Ausgabe lesbar. Der WinRM-Host beendet sich beim Rückfall in seinen lokalen Prompt, damit unter einer Remote-Überschrift keine lokale Shell weiterläuft.
-- Remote-Ausgaben ändern niemals den lokalen Startordner. Neue lokale Tabs und KI-Übergaben verwenden diesen lokalen Ordner; die KI läuft auf diesem Computer. Entfernte Arbeitsordner werden in 0.3.0 nicht nachgeführt.
-- Verbindungsprofile liegen in `workspace.json`. Projektprofile und gespeicherte Bereiche enthalten jeweils eine Kopie der Verbindung. Änderungen oder Löschen eines Favoriten verändern bestehende Bereiche/Projektprofile nicht. Beim Wiederherstellen des Workspace sowie beim Öffnen eines Projektprofils werden enthaltene Remote-Verbindungen neu aufgebaut; Prozesse oder Remote-Sitzungen werden nicht fortgesetzt.
+PNG, JPEG, WebP und BMP werden unterstützt. Es gelten dieselben Quelldateigrenzen wie für lokale Terminalbilder; die Hintergrundtextur wird auf höchstens 2048 Pixel je Seite reduziert. Das Laden erfolgt im Hintergrund, die fertige Textur wird zwischen Bereichen geteilt. **Laden / neu laden** liest eine inzwischen geänderte Datei erneut. Fehler werden in den Einstellungen angezeigt.
 
-Kennwörter und Schlüssel-Inhalte werden nicht gespeichert. Maximal 128 Verbindungsprofile sind möglich; die bisherigen Grenzen für Tabs und Bereiche gelten weiterhin. Alte Workspace- und Projektdateien bleiben lesbar. PowerShell über SSH, Dateitransfer und eine eigene Tunnelverwaltung gehören noch nicht zu dieser Version.
+Hintergrundbild und Effekt-Preset sind unabhängig. Das Bild liegt hinter Terminalinhalt und Effekten. Gespeichert wird der Dateipfad, keine Bildkopie; relative Pfade gelten zum Programmordner. Nach dem Verschieben einer Bilddatei muss der Pfad angepasst werden.
 
-Für lokale Prüfungen ohne Server:
+## Tastenkürzel
 
-```powershell
-cargo test --locked
-# Zusätzlich: OpenSSH, PowerShell-Parser und WinRM-Hostende über ConPTY, ohne Netzwerkzugriff:
-cargo test --locked -- --include-ignored
-```
-
-Die drei zusätzlichen Integrationstests benötigen lokal installiertes OpenSSH beziehungsweise PowerShell 7. Deshalb laufen sie nur auf ausdrücklichen Aufruf. Ein erfolgreicher Offline-Test bestätigt keine Anmeldung an einem echten SSH-/WinRM-Server.
-
-## Bedienung
+### Terminal
 
 | Aktion | Tastenkürzel |
 | --- | --- |
@@ -96,127 +243,107 @@ Die drei zusätzlichen Integrationstests benötigen lokal installiertes OpenSSH 
 | Nächster Tab | Strg+Umschalt+Pfeil rechts |
 | Bereich schließen | Strg+Umschalt+W |
 | Workspace speichern | Strg+Umschalt+S |
-| Kopieren / Einfügen | Strg+Umschalt+C / V |
+| Kopieren / Einfügen | Strg+Umschalt+C / Strg+Umschalt+V |
 | Verlauf durchsuchen | Strg+F |
+| Nächster / vorheriger Suchtreffer | Enter / Umschalt+Enter |
+| Suche schließen | Escape |
+| Erkannten Textlink öffnen | Strg+Klick |
 
-Für einen KI-Tab zuerst im aktiven Terminal mit `cd` zum Projekt wechseln, oben den Anbieter auswählen und **+ Tab** anklicken. Die Bereichsüberschrift zeigt den zuletzt gemeldeten Ordner. Bei KI-Sitzungen ohne Shell-Prompt bleibt der geerbte Startordner maßgeblich.
+### Editor
 
-**Sitzung neu starten** steht in jedem Bereichskopf. Andere Bereiche laufen weiter. Ein fehlender Projektordner wird als Startfehler angezeigt und nicht stillschweigend ersetzt.
+| Aktion | Tastenkürzel |
+| --- | --- |
+| Speichern | Strg+S |
+| Speichern unter | Strg+Umschalt+S |
+| Suchen | Strg+F |
+| Rückgängig / Wiederholen | Strg+Z / Strg+Umschalt+Z oder Strg+Y |
+| Einrücken / Einrückung entfernen | Tab / Umschalt+Tab |
 
-## Markierten Text an eine KI übergeben
+Die Kürzel gelten im jeweiligen Bedienkontext. Insbesondere öffnet Strg+Umschalt+S im Editor „Speichern unter“ und speichert dort nicht den Workspace.
 
-1. Text im Terminal mit der Maus markieren. In Programmen mit eigener Maussteuerung dabei **Umschalt** gedrückt halten.
-2. Rechtsklick auf den Terminalbereich → **An KI übergeben …** oder eine der vier Schnellaktionen auswählen.
-3. Anbieter und Projektordner prüfen; im Dialog eine Frage ergänzen oder den Text bearbeiten.
-4. **Senden und KI-Tab öffnen** anklicken.
+## Gespeicherte Daten
 
-Die Schnellaktionen ergänzen eine passende deutsche Anweisung und übernehmen die Auswahl einschließlich Zeilenumbrüchen. Ohne Markierung sind die Aktionen deaktiviert. Der gesamte Entwurf bleibt vor dem Senden bearbeitbar; das Limit von 10.000 Windows-Zeicheneinheiten umfasst auch die ergänzte Anweisung. Die Prompts fordern ausschließlich eine Erklärung oder einen Vorschlag an, ohne Befehle auszuführen oder Dateien zu ändern. Das ist eine Anweisung an die Anbieter-CLI, keine technische Einschränkung ihrer Werkzeuge; deren Berechtigungen und Bestätigungen gelten weiterhin.
+| Datei oder Inhalt | Speicherung |
+| --- | --- |
+| `workspace.json` neben der EXE | Tabs, Teilungen, Programme, zuletzt gemeldete lokale Ordner, Verbindungsprofile und Darstellungseinstellungen |
+| `profiles.json` neben der EXE | Benannte Projektvorlagen einschließlich ihrer Verbindungskopien |
+| Hintergrundbilder | Nur der gewählte Dateipfad im Workspace |
+| Terminalausgabe, Terminalbilder, Suchtext | Nicht im Workspace gespeichert |
+| KI-Übergabeentwürfe, Editorentwurf und Undo-Verlauf | Nur im Arbeitsspeicher |
+| SSH-/WinRM-Kennwörter, private Schlüssel | Werden von TerminalVelocity nicht gespeichert |
 
-Unterstützt werden Codex, Claude, Gemini und OpenAI API CLI. Letztere benötigt eine eigene Modell-ID und einen bereits eingerichteten API-Schlüssel. Der Dialog öffnet eine neue Sitzung; bestehende KI-Chats werden nicht beschrieben. **Abbrechen** schließt den Entwurf ohne Übergabe. Der Entwurf wird nicht in `workspace.json` gespeichert. Der Text ist auf 10.000 Windows-Zeicheneinheiten begrenzt, damit er in die Befehlszeile passt.
+Die JSON-Dateien sind lokale Konfigurationsdateien und können Hostnamen, Kontonamen und Dateipfade enthalten. Die gestarteten Shells und KI-CLIs verwalten ihre eigenen Verläufe, Zugänge und Konfigurationen unabhängig davon.
 
-Die Übergabe erfolgt als Programmargumente, ohne den Text als Shell-Befehl auszuführen. npm-Starter werden dafür direkt über Node.js und ihren Programmeinstieg aufgerufen. Mehrzeilige Auswahlen behalten Zeilenumbrüche und berücksichtigen den Scrollback.
+## Bekannte Grenzen
 
-## Projektprofile
+Die Anwendung befindet sich in Entwicklung. Es gibt automatisierte Prüfungen, aber keine vollständige manuelle Abnahme aller Bedienwege und Grafiktreiber.
 
-1. Projektordner, Anbieter, Tabs und Teilungen wie gewünscht einrichten.
-2. **Projekt speichern …** wählen, einen eindeutigen Namen und den vollständigen Projektordner eintragen, dann **Profil speichern** anklicken. Die Vorlage umfasst alle aktuell geöffneten Tabs und Bereiche sowie den Standardanbieter für neue Bereiche.
-3. Später **Projekt öffnen** wählen, das Profil auswählen und die Bereichsordner in der Vorschau prüfen.
-4. Bei Bedarf den Projektordner ändern. Bereiche innerhalb des ursprünglichen Projektordners ziehen einschließlich Unterordnern mit um; externe Ordner behalten ihren absoluten Pfad.
-5. **Projekt in neuen Tabs öffnen** startet neue Sitzungen. Bestehende Tabs und Prozesse bleiben erhalten. Fehlende Ordner oder Anbieterprogramme werden vor dem Öffnen gemeldet; es gelten insgesamt maximal 32 Tabs und 64 Bereiche.
+- Echte SSH-/WinRM-Anmeldungen wurden bisher nicht geprüft; die Verbindungstests laufen lokal ohne Serverzugriff.
+- Native Windows-Dateidialoge, Explorer-Ablage und das direkte Bildöffnen per Rechtsklick sind noch nicht vollständig im sichtbaren Fenster geprüft. Eingabe- und Renderlogik werden automatisiert getestet.
+- Terminalbilder überstehen Größenänderungen nicht. Sixel ist begrenzt implementiert; Kitty-Grafikprotokoll und benutzerdefinierte Shader fehlen.
+- Der Editor bearbeitet ein kleines UTF-8-Dokument zur Zeit und bietet keine Wiederherstellung nach einem erzwungenen Abbruch.
+- Workspace und Projektprofile starten neue Prozesse. Sie speichern keine laufenden Sitzungen oder KI-Chats.
 
-Unter **Projekt öffnen → Profil löschen …** kann eine Vorlage nach Bestätigung entfernt werden. Zum Speichern einer anderen Zusammenstellung einen neuen Namen verwenden oder die alte Vorlage vorher löschen. Maximal 32 Profile mit Namen von 1 bis 80 Zeichen sind möglich.
+Der genaue Prüfstand einschließlich früherer Versionen steht in [VERIFICATION.md](VERIFICATION.md).
 
-Profile liegen lokal in `profiles.json` neben der EXE; fehlerhafte Dateien werden gemeldet und nicht automatisch überschrieben. Darstellungsoptionen und CLI-Programmpfade bleiben globale Einstellungen. Profile speichern ausschließlich die Startkonfiguration, keine Prozesse, Terminalausgaben, Anmeldedaten, KI-Entwürfe oder Chat-Verläufe. Die vorhandene `workspace.json` bleibt kompatibel und speichert weiterhin den zuletzt benutzten Arbeitsbereich. Beide lokalen Dateien sind vom Repository ausgeschlossen.
+## Aus den Quellen bauen
 
-## Suche im Terminalverlauf
+Voraussetzungen für den geprüften Build: **Windows x64**, **PowerShell 7**, **Rust 1.89.0** mit `rustfmt` sowie **Microsoft C++ Build Tools und Windows SDK** für `x86_64-pc-windows-msvc`. Neuere Toolchains können funktionieren; der dokumentierte CI-Ablauf verwendet 1.89.0.
 
-Den gewünschten Bereich aktivieren und **Strg+F** oder **Suchen** wählen. Die Suche beachtet Groß- und Kleinschreibung und behandelt Sonderzeichen als normalen Text. Sie durchsucht den noch gespeicherten Verlauf dieses Bereichs, einschließlich weich umgebrochener Zeilen. Treffer erscheinen gelb, der aktuelle Treffer orange.
-
-**Enter** / **Weiter** springt zum nächsten Treffer, **Umschalt+Enter** / **Zurück** zum vorherigen. Nach dem letzten Treffer geht es wieder zum ersten. Ältere Treffer werden in den sichtbaren Bereich gescrollt. **Escape** oder **Schließen (Esc)** entfernt die Hervorhebung und gibt den Fokus ans Terminal zurück; die erreichte Scrollposition bleibt erhalten. Danach lässt sich Text wie gewohnt markieren und über das KI-Kontextmenü untersuchen.
-
-Neue Ausgabe wird während der Suche regelmäßig berücksichtigt. Beim Wechsel des Bereichs oder Öffnen eines Dialogs wird die Suche geschlossen. Suchtexte werden nicht gespeichert oder an die Shell bzw. KI gesendet. Maximal 256 Zeichen Suchtext und die ersten 10.000 Treffer werden unterstützt; ein `+` im Zähler weist auf weitere Treffer hin. Bereits aus dem begrenzten Terminalverlauf entfernte Ausgaben können nicht gefunden werden.
-
-## Prüfung
-
-GitHub Actions führt bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf Windows-Prüfungen aus. Der Workflow verwendet Windows Server 2022 und Rust 1.89.0: Formatierung, sämtliche Haupttests einschließlich Offline-Remote-Prüfungen, Release-Build sowie die PTY-Prüfungen für Ordnerübernahme, Neustart, Profile und Suche. Es werden keine Remote-Server kontaktiert oder KI-Anfragen gestellt. Downloads von Rust und Cargo-Abhängigkeiten benötigen Internetzugriff. Derselbe Ablauf lässt sich lokal mit PowerShell 7 über `./scripts/ci.ps1` ausführen; OpenSSH und die Build-Voraussetzungen müssen installiert sein. Dies ersetzt keine grafischen Bedienungs- oder Treibertests.
-
-`cargo test --locked` prüft unter anderem Workspace-Kompatibilität, Ordnerübernahme bei Fokuswechsel, Teilungen, Anbieterpfade und den nativen Codex-Start. Die gebaute EXE bietet weitere lokale Tests:
+Im Repositoryordner:
 
 ```powershell
-./dist/TerminalVelocity/TerminalVelocity.exe --smoke-test
-./dist/TerminalVelocity/TerminalVelocity.exe --directory-test
-./dist/TerminalVelocity/TerminalVelocity.exe --restart-test
-./dist/TerminalVelocity/TerminalVelocity.exe --profile-test
-./dist/TerminalVelocity/TerminalVelocity.exe --search-test
+./scripts/build.ps1
 ```
 
-Dabei werden Berichte neben der EXE erzeugt. Die Verzeichnis- und Neustarttests verwenden echte Windows-Pseudoterminals. Details und bekannte Grenzen stehen in [VERIFICATION.md](VERIFICATION.md).
+Das Skript bereitet die festgeschriebene ConPTY-Laufzeit vor, führt die regulären Tests aus, erstellt den Release-Build und kopiert das Git-Bash-Startskript sowie die Sixel-Demo. Ergebnis: `target/release/TerminalVelocity.exe` und die zugehörigen Laufzeitdateien. `CARGO_TARGET_DIR` kann das Build-Verzeichnis ändern. Beim ersten Lauf werden Cargo-Abhängigkeiten und ConPTY heruntergeladen.
 
-Für den Offline-Übergabetest zunächst `cargo build --release --locked --features test-tools` ausführen. Die erzeugte `prompt-probe.exe` neben die Terminal-EXE kopieren und diese mit `--handoff-test` starten. Der Test verwendet echte PTYs und ein lokales Konsolen-Testprogramm; es werden keine KI-Anfragen gesendet.
+Ein normaler Build verpackt PowerShell noch nicht. Für den Start muss PowerShell 7 installiert oder unter `shells/powershell/pwsh.exe` neben der EXE verfügbar sein. Das portable Paket ergänzt diese Laufzeit automatisch.
+
+Bei direkten Cargo-Aufrufen vorher die Laufzeit vorbereiten:
+
+```powershell
+./scripts/prepare-conpty.ps1
+cargo test --locked
+cargo build --release --locked
+```
+
+Für einen vollständigen Programmordner einschließlich der Hilfsskripte ist `build.ps1` vorzuziehen.
+
+## Tests und Paketierung
+
+### Prüfungen
+
+```powershell
+./scripts/ci.ps1
+```
+
+Der Ablauf prüft Formatierung, die Haupttests einschließlich ausdrücklich aktivierter Offline-Integrationstests, die vte-Parser-Tests, den Release-Build und vier reale Windows-PTY-Prüfungen: Ordnerübernahme, Sitzungsneustart, Projektprofile und Verlaufssuche. PowerShell 7 und OpenSSH müssen lokal verfügbar sein. Die Tests stellen keine Remote-Verbindung her und senden keine KI-Anfragen; notwendige Downloads beim Vorbereiten des Builds benötigen Internet.
+
+Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die lokale Suite umfasst derzeit **112 Tests** plus die vier PTY-Prüfungen.
+
+Weitere Diagnosemodi der EXE sind `--smoke-test`, `--directory-test`, `--restart-test`, `--profile-test` und `--search-test`. Sie erzeugen Berichte neben der EXE. Für `--handoff-test` zuvor mit `--features test-tools` bauen und die erzeugte `prompt-probe.exe` neben die Terminal-EXE legen. Dieser Test verwendet ein lokales Probeprogramm statt einer KI-Anfrage.
+
+### Portables Paket
+
+```powershell
+./scripts/package.ps1
+```
+
+Das Skript führt Tests und Build aus, ergänzt die festgeschriebenen PowerShell- und ConPTY-Dateien und erstellt `dist/TerminalVelocity-0.9.2-Windows-x64.zip` sowie eine `.sha256`-Datei. Downloadquellen und Prüfsummen stehen in [powershell-source.json](shells/powershell-source.json) und [conpty-source.json](shells/conpty-source.json).
+
+Mit `-OutputDirectory <neuer Ordner>` wird ein anderes Ziel verwendet; bestehende Paketordner werden nicht überschrieben. `-SkipBuild` ist nur für einen bereits zum aktuellen Quellstand passenden Release-Build gedacht. KI-CLIs, persönliche Einstellungen und Zugangsdaten werden nicht eingepackt.
+
+`BUILD-INFO.json` im Paket dokumentiert Git-Commit, Änderungsstatus, Toolchain, Cargo.lock-Prüfsumme, Laufzeitversionen und SHA256 je Datei. ZIP-Einträge sind sortiert und haben feste Zeitstempel. Identische Eingabedateien ergeben mit derselben Kompressionsumgebung identische ZIPs; bitidentische Neukompilierung auf beliebigen Rechnern wird damit nicht zugesichert.
+
+Die ZIP-Prüfsumme lässt sich mit PowerShell ermitteln und mit der veröffentlichten `.sha256`-Datei vergleichen:
+
+```powershell
+Get-FileHash .\TerminalVelocity-0.9.2-Windows-x64.zip -Algorithm SHA256
+```
 
 ## Technik und Lizenzen
 
-Rust, eframe/egui 0.31, alacritty_terminal 0.25 und die angepasste egui_term 0.1.0. Alle Rust-Abhängigkeiten sind über `Cargo.lock` festgeschrieben.
+Die Anwendung ist in Rust geschrieben. Die Oberfläche verwendet eframe/egui 0.31 mit OpenGL; Terminalzustand und Parser basieren auf angepassten Versionen von egui_term 0.1.0, alacritty_terminal 0.25.1 und vte 0.15.0. Die Abhängigkeiten sind in `Cargo.lock` festgeschrieben. Lokale Bibliotheksänderungen sind in [VENDOR_CHANGES.md](VENDOR_CHANGES.md) beschrieben.
 
-Projektlizenz: [MIT](LICENSE). Änderungen an der eingebetteten Terminalbibliothek sind in [VENDOR_CHANGES.md](VENDOR_CHANGES.md) dokumentiert; deren ursprüngliche Lizenz bleibt erhalten. Weitere Abhängigkeitslizenzen sind in `THIRD_PARTY_LICENSES.txt` enthalten. PowerShell behält beim Verpacken seine mitgelieferten Lizenzdateien.
-
-
-
-## Release nachvollziehen und erneut paketieren
-
-`scripts/package.ps1` setzt PowerShell 7 voraus. Standardmäßig werden Tests und Release-Build ausgeführt. Mit `-OutputDirectory <neuer Ordner>` lässt sich ein frisches Ausgabeziel angeben; bestehende Paketordner werden nicht überschrieben. `CARGO_TARGET_DIR` wählt optional das Build-Verzeichnis. `-SkipBuild` darf nur verwendet werden, wenn die dortige EXE zum aktuellen Quellstand gehört.
-
-Das Paket enthält `BUILD-INFO.json` mit Git-Commit, Änderungsstatus, rustc-/cargo-Versionen, Cargo.lock-Prüfsumme und SHA256 je Datei. Neben dem ZIP liegt dessen `.sha256`-Datei. Der PowerShell-Download wird nur bei passender festgeschriebener SHA256 verwendet; geprüfte Downloads werden wiederverwendet.
-
-ZIP-Einträge sind sortiert und haben feste Zeitstempel. Zwei Packläufe mit identischen Quelldateien, Binärdateien und derselben .NET-Kompressionsumgebung ergeben dasselbe ZIP. Das ist keine Zusage bitidentischer EXE-Neukompilierung auf beliebigen Rechnern: dafür müssen auch Compiler, Windows SDK, Linker und Buildpfade übereinstimmen. Der hier geprüfte Compiler ist rustc 1.89.0, Target x86_64-pc-windows-msvc.
-
-Versionsänderungen stehen in [CHANGELOG.md](CHANGELOG.md).
-
-## Text-Nachleuchten (0.6.0)
-
-Unter **Einstellungen → Grafikeffekte → Phosphor** lassen sich **Text-Nachleuchten**, **Leuchtstärke** und **Nachleuchtdauer** einstellen. Neue und veränderte Zeichen erhalten einen abklingenden grünen oder bernsteinfarbenen Lichtsaum hinter der normalen Schrift. Standard: 50 % Leuchtstärke und 0,6 Sekunden; Dauer einstellbar von 0,1 bis 1,5 Sekunden. Die globale Effektstärke wirkt zusätzlich.
-
-Gelöschte Zeichen hinterlassen keine Textreste. Ohne Animationen, bei Fokusverlust, in anderen Presets oder bei Stärke null ist der Effekt aus. Bei Auswahl oder Suchtreffern wird er unterdrückt. Scrollposition, Scrollback-Wachstum, Schrift-/Layoutänderungen und Wechsel des alternativen Bildschirms setzen ihn zurück. Maximal 512 Zeichen leuchten gleichzeitig, Ansichten mit mehr als 8192 sichtbaren Textzeichen verzichten auf Nachleuchten. Während des Abklingens werden höchstens 20 zusätzliche Neuzeichnungen pro Sekunde angefordert. Alte Workspace-Dateien bleiben lesbar.
-
-## Eingebauter Editor (0.7.0)
-
-**Editor** in der Werkzeugleiste öffnet einen eigenen Tab für ein lokales Dokument. Terminal-Tabs laufen weiter. **Neu**, **Öffnen …**, **Speichern** und **Speichern unter …** stehen im Editor bereit. Der Dateidialog startet im lokalen Ordner des aktiven Terminalbereichs; Remote-Pfade werden nicht als lokale Dateien verwendet.
-
-- Zeilennummern, horizontales/vertikales Scrollen und einfache Syntaxfarben für PowerShell, Bash, JSON, TOML und Markdown anhand der Dateiendung.
-- **Strg+S** speichert die Datei, **Strg+Umschalt+S** öffnet „Speichern unter“. **Strg+Z** macht Änderungen rückgängig; **Strg+Umschalt+Z** oder **Strg+Y** stellt sie wieder her. **Tab** rückt ein, **Umschalt+Tab** entfernt Einrückung an der Cursorposition.
-- **Strg+F** öffnet eine wörtliche, groß-/kleinschreibungssensitive Suche. „Nächster Treffer“ markiert und zeigt den Treffer; nach dem letzten beginnt die Suche wieder vorne.
-- Ein Stern am Dokumentnamen markiert ungespeicherte Änderungen. Beim Ersetzen/Schließen des Dokuments und beim normalen Beenden der Anwendung stehen Speichern, Verwerfen und Abbrechen zur Wahl. Ein Wechsel zum Terminal erhält den Entwurf im Arbeitsspeicher.
-- UTF-8 mit oder ohne BOM sowie einheitliche LF-/CRLF-Zeilenenden bleiben beim Speichern erhalten. Neue Dateien verwenden UTF-8 ohne BOM mit LF. Andere Kodierungen, Binärdateien und gemischte Zeilenenden werden mit Hinweis abgewiesen.
-- Maximal 256 KiB pro Datei. Speichern erfolgt über eine temporäre Datei im Zielordner und atomaren Austausch. Änderungen am Dateiinhalt außerhalb des Editors, gelöschte Quelldateien und Schreibschutz stoppen das Speichern. Bei einem Konflikt kann der eigene Entwurf unter einem anderen Namen gespeichert oder die externe Datei erneut geöffnet werden.
-
-Der Editor führt keine Skripte aus und lädt keine Dateien auf Server hoch. Er enthält weder Sprachserver noch Markdown-Vorschau. Entwürfe und Undo-Verlauf werden nicht im Workspace gespeichert; bei einem erzwungenen Prozessabbruch besteht keine Wiederherstellung. Der Button **Workspace speichern** speichert weiterhin nur das Terminal-Layout.
-
-## Sixel-Grafiken (0.8.0)
-
-Sixel ist standardmäßig aktiv. In **Einstellungen → Bilder im Terminal anzeigen (Sixel und lokale Dateien)** lässt es sich abschalten; gespeicherte Bilder werden dabei entfernt. Die Einstellung wird im Workspace gespeichert. Bilder kommen als Escape-Sequenzen aus einem Terminalprogramm, auch über SSH, sofern die Gegenstelle Sixel ausgibt. Ein als Terminaltext ausgegebener Dateipfad allein zeigt noch kein Bild an.
-
-Zum Ausprobieren im PowerShell-Tab aus dem entpackten Paketordner:
-
-```powershell
-& .\shells\sixel-demo.ps1
-```
-
-Das Skript zeichnet ein farbiges 240 × 120-Pixel-Muster und schreibt anschließend darunter weiter. Es braucht weder Netzwerk noch zusätzliche Grafikprogramme. Eigene Bilddateien lassen sich seit 0.9.0 direkt öffnen; Programme, die selbst Sixel ausgeben möchten, benötigen weiterhin einen entsprechenden Encoder.
-
-Unterstützt werden DCS-Sixel, 256 Farbregister mit RGB/HLS, Wiederholungen, Rasterabmessungen, Pixelseitenverhältnis, transparenter oder gefüllter Hintergrund, Grafikfähigkeits-/Zellgrößenabfragen sowie DEC-Modi 80 und 1070. Bilder scrollen mit dem Text und bleiben im begrenzten Scrollback sichtbar. Haupt- und Alternativbildschirm führen getrennte Bildbestände. Textüberschreiben und Löschbefehle entfernen die betroffenen Bildsegmente.
-
-Bewusste Grenzen: maximal 4096 Pixel je Seite und 2 Megapixel je Bild nach Skalierung; 4 MiB Eingabedaten je Sequenz; je Bildschirm maximal 16 MiB unkomprimierte Bilddaten, 32 Bilder und 4096 Zeilensegmente. Ältere Bilder werden bei Erreichen des Limits entfernt. Größen-, Schrift- oder Layoutänderungen löschen Bilder statt sie mit Text neu umzubrechen. Zeichen einfügen/löschen entfernt Bildteile ab der betroffenen Position. Bilder werden weder kopiert, durchsucht noch in Workspace-Dateien gespeichert. Dies ist kein Kitty-Grafikprotokoll und keine vollständige VT340-Emulation.
-
-Das Paket enthält Microsofts portable ConPTY-Version **1.25.260930003** (`conpty.dll` und `OpenConsole.exe`) neben der EXE. Sie wird ausschließlich dort geladen und verändert keine Windows-Systemdateien. Ältere System-ConPTY-Versionen können Sixel entfernen; deshalb beide Dateien beim Kopieren mitnehmen. Build und CI bereiten die geprüfte Laufzeit automatisch vor. Bei direktem Cargo-Aufruf vorher `./scripts/prepare-conpty.ps1` ausführen. Der erste Download braucht Internet; Quelle, SHA256 und MIT-Lizenz stehen unter `shells/conpty-*`.
-
-## Lokale Bilder öffnen (0.9.0)
-
-Im gewünschten Terminalbereich **Rechtsklick → Bild auswählen …** wählen oder eine lokale Bilddatei aus dem Explorer auf dessen Ausgabefläche ziehen. Bei Teilungen entscheidet die Ablageposition über den Zielbereich. PNG, JPEG, WebP und BMP werden unterstützt. Eine Textmarkierung ist dafür nicht nötig. Im Editor oder bei geöffneten App-Dialogen ist die Ablage deaktiviert.
-
-Seit 0.9.1 öffnet **Rechtsklick auf einen ausgegebenen Bilddateinamen → Bild öffnen** das erkannte Bild direkt. Der Tooltip zeigt den ermittelten Pfad. Relative Dateinamen gelten zum aktuellen lokalen Ordner des Bereichs; auch Namen mit Leerzeichen und Anführungszeichen werden berücksichtigt. Terminalausgabe ist unstrukturierter Text: abgeschnittene Namen, mehrdeutige Auflistungen oder ältere Ausgaben aus einem anderen Ordner können nicht zuverlässig zugeordnet werden. Dafür bleibt „Bild auswählen …“ verfügbar. In SSH-/WinRM-Bereichen ist das direkte Öffnen von Textpfaden deaktiviert; lokale Dateiauswahl und Ablage bleiben möglich.
-
-Das Bild erscheint an der aktuellen Ausgabeposition; eine bereits begonnene Textzeile wird vorher abgeschlossen. Große Bilder werden proportional auf die Terminalbreite und das Bildlimit verkleinert, kleine Bilder nicht vergrößert. Der gemeinsame Decoder begrenzt die längste Seite zunächst auf 2048 Pixel. Transparenz und volle RGB-Farben bleiben erhalten. Laufende Terminalprogramme können Bildbereiche später überschreiben oder löschen. Bei großen Bildern lässt sich der obere Teil über den Scrollback erreichen.
-
-Das Laden läuft im Hintergrund, jeweils für eine Datei. Maximal 32 MiB Dateigröße, 16 Megapixel und 16384 Pixel je Quellseite; danach gelten die Sixel-Bildspeichergrenzen. Mehrfachablagen, ungültige Dateien und Ladefehler werden in der Statusleiste gemeldet. Wird die Zielsitzung während des Ladens geschlossen/neugestartet oder ihre Breite geändert, wird das Ergebnis verworfen.
-
-Unter **Einstellungen → Bilder im Terminal anzeigen (Sixel und lokale Dateien)** lassen sich beide Eingangswege abschalten. Die Bilder werden lokal gelesen und direkt dargestellt: kein Shell-Befehl, kein Upload und keine Übertragung an SSH-/WinRM-Gegenstellen. Fenster-/Schriftänderungen löschen sie; im Workspace werden weder Bilder noch ihre Dateipfade gespeichert.
+TerminalVelocity steht unter der [MIT-Lizenz](LICENSE). Abhängigkeiten behalten ihre jeweiligen Lizenzen; siehe [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt), die Lizenzdateien in `vendor/` und die mitgelieferten PowerShell-/ConPTY-Lizenzen. Das Repository enthält keine kompilierten Programme, heruntergeladenen Laufzeiten oder persönlichen Workspace-Dateien.

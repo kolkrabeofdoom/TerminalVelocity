@@ -90,3 +90,7 @@ Native Explorer-Ablage und Windows-Dateidialog wurden nicht im sichtbaren Fenste
 ## Kontextabhängiges Bildöffnen 0.9.1 – 22. Oktober 2026
 
 112 Tests und die vier lokalen PTY-Modi erfolgreich; Formatierung und Release-Build bestanden. Neue Prüfung der Pfadauflösung für Verzeichnislisten, absolute/relative Namen, Leerzeichen, Unicode, Apostrophe, mehrere Dateien in einer Zeile und konkurrierende Namenssuffixe. Nicht unterstützte Endungen, angehängte EXE-Endungen und HTTP-URLs werden nicht als direkte Bildziele erkannt. Der ConPTY-Test prüft zusätzlich die Zuordnung einer Pixelposition zum korrekten UTF-8-Zeichen in ausgegebenem Terminaltext. Nach der Präzisierung der Kandidatenreihenfolge wurden Pfadtest und Release-Build erneut ausgeführt. Native Rechtsklick-Bedienung im sichtbaren Fenster bleibt manuell zu prüfen.
+
+## Erstes GitHub-Release 0.9.2 – 22. Oktober 2026
+
+Keine funktionalen Änderungen gegenüber 0.9.1. Der vollständige lokale Ablauf wurde für den neuen Versionsstand erneut ausgeführt: Formatierung, 42 Haupttests, drei Renderer-Tests, elf Bild-/Sixel-Tests, zwei ConPTY-Tests und 54 vte-Parserprüfungen (112 Tests insgesamt), Release-Build und die vier PTY-Modi erfolgreich. README und Release Notes wurden gegen die vorhandenen Funktionen abgeglichen; lokale README-Links und Codeblock-Begrenzungen geprüft. Das Paket enthält die neue README und RELEASE_NOTES.md. Die zuvor genannten Grenzen der manuellen und Remote-Prüfung gelten weiterhin.

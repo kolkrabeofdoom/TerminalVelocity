@@ -30,7 +30,7 @@ Copy-Item -LiteralPath $executable -Destination (Join-Path $packageRoot 'Termina
 foreach ($name in @('conpty.dll','OpenConsole.exe')) {
     Copy-Item -LiteralPath (Join-Path $targetRoot "release/$name") -Destination $packageRoot
 }
-foreach ($name in @('README.md','LICENSE','VERIFICATION.md','VENDOR_CHANGES.md','THIRD_PARTY_LICENSES.txt','CHANGELOG.md')) {
+foreach ($name in @('README.md','RELEASE_NOTES.md','LICENSE','VERIFICATION.md','VENDOR_CHANGES.md','THIRD_PARTY_LICENSES.txt','CHANGELOG.md')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $name) -Destination $packageRoot
 }
 foreach ($name in @('terminalvelocity.bash','sixel-demo.ps1','powershell-source.json','conpty-source.json','conpty-LICENSE.txt')) {

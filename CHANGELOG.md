@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.9.2 – 22. Oktober 2026
+
+- Erstes veröffentlichtes GitHub-Release mit portablem Windows-x64-Paket und SHA256-Datei.
+- README vollständig nach Aufgaben neu gegliedert: Installation, sämtliche vorhandenen Funktionen, Bedienung, Datenhaltung, Grenzen, Build und Prüfung.
+- Eigene Release Notes, auch im Download-Paket enthalten. Keine funktionalen Änderungen gegenüber 0.9.1.
+
 ## 0.9.1 – 22. Oktober 2026
 
 - „Bild öffnen“ im Kontextmenü verwendet den angeklickten lokalen Bildpfad direkt, ohne Windows-Dateidialog.
