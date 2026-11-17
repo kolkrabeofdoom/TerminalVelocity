@@ -150,7 +150,7 @@ impl VisualEffects {
                     let y = rect.top() + i as f32 * 4.0;
                     painter.line_segment(
                         [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
-                        Stroke::new(0.7, color),
+                        Stroke::new(0.7_f32, color),
                     );
                 }
                 painter.rect_filled(rect, 0.0, self.accent().gamma_multiply(0.025 * strength));
@@ -329,7 +329,7 @@ impl CursorTrail {
                     painter.line_segment(
                         [rect.center(), current.center()],
                         Stroke::new(
-                            2.0,
+                            2.0_f32,
                             effects
                                 .accent()
                                 .gamma_multiply(0.15 * effects.strength() * fade),
@@ -345,7 +345,7 @@ impl CursorTrail {
                         cursor.expand(spread),
                         3.0,
                         Stroke::new(
-                            1.5,
+                            1.5_f32,
                             effects.accent().gamma_multiply(0.10 * effects.strength()),
                         ),
                         egui::StrokeKind::Inside,

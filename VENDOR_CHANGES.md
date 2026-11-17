@@ -46,3 +46,8 @@ TextAfterglow speichert maximal 8192 aktuelle Glyphen und 512 Leuchtzeitpunkte. 
 ## 0.9.1: Text unter dem Kontextmenü
 
 egui_term stellt die logische Textzeile unter einer Pixelposition samt UTF-8-Byteoffset bereit. Die Zuordnung berücksichtigt Scrollback, weiche Zeilenumbrüche und breite Zeichen. Pfaderkennung und das Festhalten des angeklickten Ziels liegen im Hauptprogramm.
+
+## 0.9.3: Sicherheitshärtung
+
+- `vendor/egui_term-0.1.0`: `url_regex` und `open_link` sind über `is_safe_http_url` auf wohlgeformte `http://`- und `https://`-Links beschränkt; `file://`- und Fremdprotokoll-Schemata sowie der Panic bei fehlgeschlagenem `open::that`-Aufruf wurden entfernt. Explizite `f32`-Literale in `src/effects.rs` beseitigen zukünftige Compilerwarnungen.
+- `vendor/alacritty_terminal-0.25.1`: `conpty.rs` gibt Fehler bei `CreatePseudoConsole` als `io::Error` zurück und protokolliert `ResizePseudoConsole`-Fehler über `warn!`, statt per `assert_eq!` abzubrechen.

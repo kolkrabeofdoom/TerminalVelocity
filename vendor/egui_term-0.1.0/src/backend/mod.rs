@@ -151,6 +151,16 @@ struct HistorySearch {
     refreshed: std::time::Instant,
 }
 
+/// Only permit standard HTTP(S) URLs with a non-empty host; block local file:// or custom schemes.
+pub fn is_safe_http_url(url: &str) -> bool {
+    if url.len() > 2048 || url.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return false;
+    }
+    url.strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/') && !rest.starts_with('\\'))
+}
+
 fn literal_pattern(query: &str) -> String {
     // Explicit case sensitivity avoids RegexSearch's automatic smart-case behavior.
     let mut pattern = String::from("(?-i)");
@@ -200,7 +210,7 @@ impl TerminalBackend {
         let notifier = Notifier(pty_event_loop.channel());
         let reply_notifier = Notifier(pty_event_loop.channel());
         let reply_term = term.clone();
-        let url_regex = RegexSearch::new(r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file://|git://|ssh:|ftp://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();
+        let url_regex = RegexSearch::new(r#"(https://|http://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();
         let _pty_event_loop_thread = pty_event_loop.spawn();
         let _pty_event_subscription = std::thread::Builder::new()
             .name(format!("pty_event_subscription_{}", id))
@@ -444,9 +454,9 @@ impl TerminalBackend {
                 }
             }
 
-            open::that(url).unwrap_or_else(|_| {
-                panic!("link opening is failed");
-            })
+            if is_safe_http_url(&url) {
+                let _ = open::that(url);
+            }
         }
     }
 

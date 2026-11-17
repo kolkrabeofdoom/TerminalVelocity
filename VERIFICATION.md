@@ -94,3 +94,7 @@ Native Explorer-Ablage und Windows-Dateidialog wurden nicht im sichtbaren Fenste
 ## Erstes GitHub-Release 0.9.2 – 22. Oktober 2026
 
 Keine funktionalen Änderungen gegenüber 0.9.1. Der vollständige lokale Ablauf wurde für den neuen Versionsstand erneut ausgeführt: Formatierung, 42 Haupttests, drei Renderer-Tests, elf Bild-/Sixel-Tests, zwei ConPTY-Tests und 54 vte-Parserprüfungen (112 Tests insgesamt), Release-Build und die vier PTY-Modi erfolgreich. README und Release Notes wurden gegen die vorhandenen Funktionen abgeglichen; lokale README-Links und Codeblock-Begrenzungen geprüft. Das Paket enthält die neue README und RELEASE_NOTES.md. Die zuvor genannten Grenzen der manuellen und Remote-Prüfung gelten weiterhin.
+
+## Sicherheitshärtung 0.9.3
+
+44 Haupttests, drei Renderer-Tests, elf Bild-/Sixel-Tests, zwei ConPTY-Tests und 54 vte-Parserprüfungen (114 Tests insgesamt) sowie Formatierung, Release-Build und Paketierung erfolgreich. Neu geprüft: Ablehnung von UNC- und Gerätepfaden (`\\server\share`, `\\.\...`) bei `TERMINALVELOCITY_CWD:`-Titeln, Workspace-Validierung, Shell-/SSH-Auflösung, KI-Übergabe und Rechtsklick-Bildpfaden; Beschränkung von `is_safe_http_url` auf gültige `http(s)://`-Links ohne `file://`-Ausführung; Vorrang des System-`PATH` (`Machine`) vor dem Benutzer-`PATH` (`User`) in PowerShell-Sitzungen; Ablehnung von Pfad-Traversierung (`..`) in `package.json` bei `node_entry`; atomare JSON-Speicherung über `create_new(true)`.

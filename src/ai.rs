@@ -71,7 +71,7 @@ impl Draft {
         if self.text.contains('\0') || self.text.encode_utf16().count() > MAX_PROMPT_UNITS {
             return Err("Bitte den Text auf höchstens 10.000 Zeichen kürzen; Nullzeichen sind nicht möglich.".into());
         }
-        if !self.directory.is_absolute() || !self.directory.is_dir() {
+        if !crate::model::is_local_absolute_path(&self.directory) || !self.directory.is_dir() {
             return Err("Der Projektordner existiert nicht mehr.".into());
         }
         let args = prompt_args(self.provider, &self.text, &self.model)?;
@@ -134,7 +134,21 @@ fn node_entry(wrapper: &Path, provider: Shell) -> Result<(PathBuf, PathBuf), Str
         .as_str()
         .or_else(|| metadata["bin"][bin].as_str())
         .ok_or("npm-Starteintrag fehlt")?;
-    let entry = root.join(entry);
+    let entry_rel = Path::new(entry);
+    if entry.is_empty()
+        || entry_rel.is_absolute()
+        || entry_rel.components().any(|c| {
+            matches!(
+                c,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return Err("Ungültiger npm-Starteintrag.".into());
+    }
+    let entry = root.join(entry_rel);
     if !entry.is_file() {
         return Err("npm-Startdatei fehlt.".into());
     }
@@ -215,5 +229,34 @@ mod tests {
         let (_, args) = draft.command("tool.exe".into()).unwrap();
         assert_eq!(args, ["--", "a\nb"]);
         assert_eq!(draft.directory, directory);
+        let unc_draft = Draft::new(
+            "test".into(),
+            PathBuf::from(r"\\198.51.100.1\share"),
+            Shell::Codex,
+        );
+        assert!(unc_draft.command("tool.exe".into()).is_err());
+    }
+    #[test]
+    fn node_entry_rejects_package_json_path_traversal() {
+        let root = std::env::temp_dir().join(format!("tv-node-sec-{}", std::process::id()));
+        let pkg_dir = root.join("node_modules/@openai/codex");
+        std::fs::create_dir_all(&pkg_dir).unwrap();
+        std::fs::write(root.join("outside.js"), b"").unwrap();
+        for bad_bin in [
+            "../../../outside.js",
+            "/outside.js",
+            r"\\198.51.100.1\share\a.js",
+        ] {
+            std::fs::write(
+                pkg_dir.join("package.json"),
+                format!(r#"{{"bin": {:?}}}"#, bad_bin),
+            )
+            .unwrap();
+            assert!(
+                node_entry(&root.join("codex.cmd"), Shell::Codex).is_err(),
+                "{bad_bin}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

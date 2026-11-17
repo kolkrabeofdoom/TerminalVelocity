@@ -1,5 +1,76 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// Reject UNC (`\\server\share`) and Windows device (`\\.\...`) paths to prevent
+/// unintended SMB/NTLM network probes or blocking I/O on the GUI thread.
+pub fn is_unc_or_device_path(path: &Path) -> bool {
+    use std::path::{Component, Prefix};
+    let raw = path.as_os_str().to_string_lossy();
+    raw.starts_with(r"\\") && !raw.starts_with(r"\\?\")
+        || raw.starts_with("//")
+        || matches!(
+            path.components().next(),
+            Some(Component::Prefix(prefix))
+                if !matches!(prefix.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_))
+        )
+}
+
+pub fn is_local_absolute_path(path: &Path) -> bool {
+    path.is_absolute() && !is_unc_or_device_path(path)
+}
+
+/// Write JSON to a unique staging file with `create_new(true)` and atomically replace `path`.
+pub fn atomic_write_json(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    if let Ok(meta) = std::fs::symlink_metadata(path) {
+        if meta.file_type().is_symlink() {
+            return Err("Symbolische Links werden nicht überschrieben.".into());
+        }
+    }
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("config.json");
+    let temporary = parent.join(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let mut staged = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|e| e.to_string())?;
+    let result = (|| -> Result<(), String> {
+        staged
+            .write_all(bytes)
+            .and_then(|_| staged.sync_all())
+            .map_err(|e| e.to_string())?;
+        drop(staged);
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            use windows_sys::Win32::Storage::FileSystem::MoveFileExW;
+            let from: Vec<u16> = temporary.as_os_str().encode_wide().chain(Some(0)).collect();
+            let to: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+            if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 1 | 8) } == 0 {
+                return Err(std::io::Error::last_os_error().to_string());
+            }
+        }
+        #[cfg(not(windows))]
+        std::fs::rename(&temporary, path).map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Shell {
@@ -45,13 +116,20 @@ impl Shell {
     }
     pub fn resolve(self, custom: Option<&str>, app_dir: &std::path::Path) -> Option<PathBuf> {
         if let Some(value) = custom.filter(|value| !value.trim().is_empty()) {
-            let path = PathBuf::from(value.trim().trim_matches('"'));
+            let raw = value.trim().trim_matches('"');
+            if raw.len() > 4096 || raw.chars().any(char::is_control) {
+                return None;
+            }
+            let path = PathBuf::from(raw);
+            if is_unc_or_device_path(&path) {
+                return None;
+            }
             let path = if path.is_absolute() {
                 path
             } else {
                 app_dir.join(path)
             };
-            return path.is_file().then_some(path);
+            return (!is_unc_or_device_path(&path) && path.is_file()).then_some(path);
         }
         if let Some(path) = self.bundled(app_dir) {
             return Some(path);
@@ -157,7 +235,7 @@ impl Shell {
         version_only: bool,
     ) -> Result<(PathBuf, Vec<String>), String> {
         if *self == Self::PowerShell {
-            let mut script = "$env:Path = [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path;".to_string();
+            let mut script = "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path;".to_string();
             if let Some(codex) = Self::Codex.resolve(None, app_dir) {
                 script.push_str(&format!(
                     " Set-Alias -Name codex -Value '{}' -Scope Global;",
@@ -383,7 +461,7 @@ impl Workspace {
             return false;
         };
         let path = PathBuf::from(path);
-        if !path.is_absolute() || !path.is_dir() {
+        if !is_local_absolute_path(&path) || !path.is_dir() {
             return false;
         }
         pane.directory = path;
@@ -410,6 +488,20 @@ impl Workspace {
             }
         }
         self.shell_paths.resize(Shell::ALL.len(), String::new());
+        for value in std::iter::once(&self.ssh_path).chain(self.shell_paths.iter()) {
+            let trimmed = value.trim().trim_matches('"');
+            if value.len() > 4096
+                || value.chars().any(char::is_control)
+                || (!trimmed.is_empty() && is_unc_or_device_path(Path::new(trimmed)))
+            {
+                return Err("Ungültiger Programmpfad".into());
+            }
+        }
+        if let Some(dir) = &self.default_directory {
+            if !is_local_absolute_path(dir) {
+                return Err("Ungültiger Standardordner".into());
+            }
+        }
         if self.version != 1 {
             return Err("Unbekannte Workspace-Version".into());
         }
@@ -429,6 +521,9 @@ impl Workspace {
                 Node::Pane(p) => {
                     if let Some(remote) = &p.remote {
                         remote.validate()?;
+                    }
+                    if !is_local_absolute_path(&p.directory) {
+                        return Err("Alle Bereichsordner müssen lokale absolute Pfade sein.".into());
                     }
                     if !ids.insert(p.id) || p.id > 1_000_000 || ids.len() > 64 {
                         return Err("Ungültige oder zu viele Bereiche".into());
@@ -469,9 +564,7 @@ mod tests {
     use super::*;
     #[test]
     fn portable_shell_resolves_without_path_and_custom_path_takes_priority() {
-        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../work")
-            .join(format!("resolve-test-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("resolve-test-{}", std::process::id()));
         let shell_dir = base.join("shells/powershell");
         std::fs::create_dir_all(&shell_dir).unwrap();
         let exe = shell_dir.join("pwsh.exe");
@@ -567,17 +660,72 @@ mod tests {
         );
         assert!(!workspace.update_directory(12, "normal window title"));
         assert!(!workspace.update_directory(12, "TERMINALVELOCITY_CWD:relative"));
+        assert!(!workspace.update_directory(12, r"TERMINALVELOCITY_CWD:\\198.51.100.1\share"));
+        assert!(!workspace.update_directory(12, "TERMINALVELOCITY_CWD://198.51.100.1/share"));
+        assert!(!workspace.update_directory(12, r"TERMINALVELOCITY_CWD:\\?\UNC\198.51.100.1\share"));
         assert_eq!(
             workspace.inherited_directory(99, std::path::Path::new("fallback")),
             PathBuf::from("fallback")
         );
+    }
+    #[test]
+    fn security_hardening_rejects_unc_paths_unsafe_urls_and_preserves_machine_path_order() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        assert!(is_local_absolute_path(&base));
+        for unc in [
+            r"\\198.51.100.1\share",
+            "//198.51.100.1/share",
+            r"\\?\UNC\198.51.100.1\share",
+            r"\\.\PhysicalDrive0",
+        ] {
+            let p = Path::new(unc);
+            assert!(is_unc_or_device_path(p), "{unc}");
+            assert!(!is_local_absolute_path(p), "{unc}");
+            assert_eq!(Shell::PowerShell.resolve(Some(unc), &base), None);
+        }
+        let mut ws = Workspace::default();
+        ws.tabs.push(Tab {
+            name: "unc".into(),
+            root: Node::Pane(Pane {
+                remote: None,
+                id: 1,
+                shell: Shell::PowerShell,
+                directory: PathBuf::from(r"\\198.51.100.1\share"),
+            }),
+        });
+        assert!(ws.validate().is_err());
+        let mut ws = Workspace::default();
+        ws.ssh_path = r"\\198.51.100.1\share\ssh.exe".into();
+        assert!(ws.validate().is_err());
+
+        let (_, args) = Shell::PowerShell
+            .launch(PathBuf::from("pwsh.exe"), &base, false)
+            .unwrap();
+        let script = &args[3];
+        let machine_pos = script.find("('Path','Machine')").unwrap();
+        let user_pos = script.find("('Path','User')").unwrap();
+        assert!(machine_pos < user_pos);
+
+        assert!(egui_term::is_safe_http_url("https://example.org/path?q=1"));
+        assert!(egui_term::is_safe_http_url("http://localhost:8080"));
+        for unsafe_url in [
+            "file:///C:/Windows/System32/calc.exe",
+            "file:////198.51.100.1/share/payload.exe",
+            "ssh://user@example.org",
+            "https://",
+            "http:///path",
+            "https://\\198.51.100.1/share",
+            "https://example.org/a\nb",
+        ] {
+            assert!(!egui_term::is_safe_http_url(unsafe_url), "{unsafe_url}");
+        }
     }
     fn pane(id: u64) -> Pane {
         Pane {
             remote: None,
             id,
             shell: Shell::PowerShell,
-            directory: PathBuf::from("."),
+            directory: PathBuf::from(env!("CARGO_MANIFEST_DIR")),
         }
     }
     #[test]

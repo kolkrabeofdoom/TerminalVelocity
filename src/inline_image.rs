@@ -37,8 +37,11 @@ pub fn path_at(text: &str, offset: usize, base: &std::path::Path) -> Option<Path
                     continue;
                 }
                 let path = PathBuf::from(candidate);
-                // Drive-relative paths and URI schemes are ambiguous; no expansion.
-                if candidate.contains("://") || (candidate.contains(':') && !path.is_absolute()) {
+                // Drive-relative paths, UNC/device paths and URI schemes are ambiguous; no expansion.
+                if candidate.contains("://")
+                    || (candidate.contains(':') && !path.is_absolute())
+                    || crate::model::is_unc_or_device_path(&path)
+                {
                     continue;
                 }
                 let path = if path.is_absolute() {
@@ -46,6 +49,9 @@ pub fn path_at(text: &str, offset: usize, base: &std::path::Path) -> Option<Path
                 } else {
                     base.join(path)
                 };
+                if crate::model::is_unc_or_device_path(&path) {
+                    continue;
+                }
                 checked += 1;
                 if checked > 64 {
                     return fallback;
@@ -178,6 +184,8 @@ mod tests {
         assert!(path_at("readme.txt", 1, &base).is_none());
         assert!(path_at("first.png.exe", 1, &base).is_none());
         assert!(path_at("https://example.org/a.png", 2, &base).is_none());
+        assert!(path_at(r"\\198.51.100.1\share\a.png", 2, &base).is_none());
+        assert!(path_at("//198.51.100.1/share/a.png", 2, &base).is_none());
         for name in [
             "first.png",
             "zweites Bild ä.jpg",

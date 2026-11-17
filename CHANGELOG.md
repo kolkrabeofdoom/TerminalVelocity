@@ -1,5 +1,14 @@
 # Änderungen
 
+## 0.9.3 – Security-Hardening-Release
+
+- **Link-Härtung (`Strg+Klick`)**: Nur noch wohlgeformte `http://`- und `https://`-Links mit nicht-leerem Host werden erkannt und geöffnet; `file://`-, UNC- und Fremdprotokoll-Schemata sowie der Prozess-Panic bei fehlgeschlagenem `open::that`-Aufruf wurden entfernt.
+- **Schutz vor SMB/UNC-Netzwerkzugriffen**: UNC- (`\\server\share`, `//server/share`, `\\?\UNC\...`) und Windows-Gerätepfade (`\\.\...`) werden vor lokalen Dateisystemprüfungen (`is_dir`, `is_file`, `File::open`) abgewiesen (verhindert unbeabsichtigte NTLM-Authentifizierungsversuche und UI-Blockaden durch Terminalausgaben oder Pfadklicks).
+- **Sichere PowerShell-`PATH`-Reihenfolge**: Der System-`PATH` (`Machine` / `System32`) behält in gestarteten PowerShell-Sitzungen Vorrang vor dem Benutzer-`PATH` (`User`).
+- **Pfad- & Konfigurationsvalidierung**: Schutz vor Pfad-Traversierung (`..`) beim Auslesen von `package.json` in `node_entry`; strikte Prüfung von Ordner- und Programmpfaden in `Workspace::validate()`.
+- **ConPTY-Fehlerbehandlung**: Fehler bei `CreatePseudoConsole` und `ResizePseudoConsole` werden sauber als `io::Error` bzw. Warnung verarbeitet statt die Anwendung per `assert_eq!` zu beenden.
+- **Atomares Speichern & Bereinigung**: `workspace.json` und `profiles.json` werden über eindeutige Staging-Dateien (`create_new(true)`, `sync_all()`, Symlink-Prüfung) atomar ersetzt; der Debug-Schreibzugriff auf `transparency-status.txt` wurde entfernt.
+
 ## 0.9.2 – 22. Oktober 2026
 
 - Erstes veröffentlichtes GitHub-Release mit portablem Windows-x64-Paket und SHA256-Datei.

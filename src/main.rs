@@ -434,31 +434,9 @@ impl TerminalApp {
 
     fn save_workspace(&mut self) -> bool {
         self.workspace.default_directory = Some(PathBuf::from(&self.directory));
-        let result = (|| -> Result<(), Box<dyn std::error::Error>> {
-            let encoded = serde_json::to_vec_pretty(&self.workspace)?;
-            let temporary = self.storage.with_extension("json.tmp");
-            std::fs::write(&temporary, encoded)?;
-            // Replace in one filesystem operation; preserve the previous file on write failure.
-            #[cfg(windows)]
-            {
-                use std::os::windows::ffi::OsStrExt;
-                unsafe extern "system" {
-                    fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
-                }
-                let from: Vec<u16> = temporary.as_os_str().encode_wide().chain(Some(0)).collect();
-                let to: Vec<u16> = self
-                    .storage
-                    .as_os_str()
-                    .encode_wide()
-                    .chain(Some(0))
-                    .collect();
-                if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 1 | 8) } == 0 {
-                    return Err(std::io::Error::last_os_error().into());
-                }
-            }
-            #[cfg(not(windows))]
-            std::fs::rename(temporary, &self.storage)?;
-            Ok(())
+        let result = (|| -> Result<(), String> {
+            let encoded = serde_json::to_vec_pretty(&self.workspace).map_err(|e| e.to_string())?;
+            model::atomic_write_json(&self.storage, &encoded)
         })();
         let saved = result.is_ok();
         self.status = match result {
@@ -970,7 +948,7 @@ fn draw_node(
                                 let files = inline_image::take_drop(ui.ctx(), response.rect);
                                 if !files.is_empty() { *image_request = Some(inline_image::Request::Drop(pane.id, files)); }
                                 if ui.input(|i| !i.raw.hovered_files.is_empty()) {
-                                    ui.painter().rect_stroke(response.rect.shrink(1.0), 2.0, Stroke::new(2.0, Color32::LIGHT_BLUE), egui::StrokeKind::Inside);
+                                    ui.painter().rect_stroke(response.rect.shrink(1.0), 2.0, Stroke::new(2.0_f32, Color32::LIGHT_BLUE), egui::StrokeKind::Inside);
                                 }
                             }
                             let image_target_id = response.id.with("clicked-image-path");
@@ -1512,10 +1490,6 @@ impl eframe::App for TerminalApp {
             match set_window_opacity(&*frame, desired_opacity) {
                 Ok(()) => {
                     self.applied_opacity = Some(desired_opacity);
-                    let _ = std::fs::write(
-                        self.storage.with_file_name("transparency-status.txt"),
-                        format!("Windows window alpha applied: {desired_opacity:?}"),
-                    );
                 }
                 Err(error) => self.status = format!("Fenstertransparenz fehlgeschlagen: {error}"),
             }

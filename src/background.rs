@@ -25,6 +25,13 @@ impl Default for Settings {
 }
 impl Settings {
     pub fn validate(&mut self) {
+        if self.path.len() > 4096
+            || self.path.chars().any(char::is_control)
+            || crate::model::is_unc_or_device_path(Path::new(&self.path))
+        {
+            self.enabled = false;
+            self.path.clear();
+        }
         self.darkness = if self.darkness.is_finite() {
             self.darkness.clamp(0.0, 1.0)
         } else {
@@ -174,6 +181,9 @@ fn load_image(path: &Path) -> Result<egui::ColorImage, String> {
 
 pub(crate) fn load_rgba(path: &Path) -> Result<image::RgbaImage, String> {
     use std::io::Read;
+    if crate::model::is_unc_or_device_path(path) {
+        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
+    }
     let file = std::fs::File::open(path).map_err(|e| format!("Bild nicht geöffnet: {e}"))?;
     let mut bytes = Vec::new();
     file.take(32 * 1024 * 1024 + 1)

@@ -67,7 +67,9 @@ impl Connection {
         if self.port == Some(0) {
             return Err("Der Port muss zwischen 1 und 65535 liegen.".into());
         }
-        if !self.key_file.is_empty() && !Path::new(&self.key_file).is_absolute() {
+        if !self.key_file.is_empty()
+            && !crate::model::is_local_absolute_path(Path::new(&self.key_file))
+        {
             return Err("Bitte einen absoluten Pfad zur Schlüsseldatei angeben.".into());
         }
         Ok(())
@@ -158,13 +160,20 @@ impl Connection {
 
 pub fn ssh_executable(custom: &str, base: &Path) -> Option<PathBuf> {
     if !custom.trim().is_empty() {
-        let path = PathBuf::from(custom.trim().trim_matches('"'));
+        let raw = custom.trim().trim_matches('"');
+        if raw.len() > 4096 || raw.chars().any(char::is_control) {
+            return None;
+        }
+        let path = PathBuf::from(raw);
+        if crate::model::is_unc_or_device_path(&path) {
+            return None;
+        }
         let path = if path.is_absolute() {
             path
         } else {
             base.join(path)
         };
-        return path.is_file().then_some(path);
+        return (!crate::model::is_unc_or_device_path(&path) && path.is_file()).then_some(path);
     }
     if let Some(root) = std::env::var_os("SystemRoot") {
         let path = PathBuf::from(root).join("System32/OpenSSH/ssh.exe");
@@ -230,6 +239,13 @@ mod tests {
             c.host = host.into();
             assert!(c.ssh_args().is_err());
         }
+        c.host = "server-alias".into();
+        c.key_file = r"\\198.51.100.1\share\id_ed25519".into();
+        assert!(c.ssh_args().is_err());
+        assert_eq!(
+            ssh_executable(r"\\198.51.100.1\share\ssh.exe", Path::new(".")),
+            None
+        );
     }
     #[test]
     fn winrm_quotes_values_and_never_leaves_local_prompt() {

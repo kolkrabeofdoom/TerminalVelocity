@@ -31,7 +31,7 @@ impl Profile {
         {
             return Err("Bitte einen Projektnamen mit 1 bis 80 Zeichen eingeben.".into());
         }
-        if !self.directory.is_absolute() || self.tabs.is_empty() {
+        if !crate::model::is_local_absolute_path(&self.directory) || self.tabs.is_empty() {
             return Err(
                 "Ein Profil benötigt einen absoluten Projektordner und mindestens einen Tab."
                     .into(),
@@ -45,7 +45,7 @@ impl Profile {
         if workspace
             .panes()
             .iter()
-            .any(|pane| !pane.directory.is_absolute())
+            .any(|pane| !crate::model::is_local_absolute_path(&pane.directory))
         {
             return Err("Alle Bereichsordner müssen absolute Pfade sein.".into());
         }
@@ -60,7 +60,7 @@ impl Profile {
         next_id: u64,
     ) -> Result<(Workspace, u64), String> {
         self.validate()?;
-        if !directory.is_absolute() || !directory.is_dir() {
+        if !crate::model::is_local_absolute_path(directory) || !directory.is_dir() {
             return Err("Der Projektordner existiert nicht oder ist kein absoluter Pfad.".into());
         }
         let mut tabs = self.tabs.clone();
@@ -158,23 +158,7 @@ impl Library {
         if bytes.len() > 2_000_000 {
             return Err("Profildatei ist zu groß.".into());
         }
-        let temporary = path.with_extension("json.tmp");
-        std::fs::write(&temporary, bytes).map_err(|e| e.to_string())?;
-        #[cfg(windows)]
-        {
-            use std::os::windows::ffi::OsStrExt;
-            unsafe extern "system" {
-                fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
-            }
-            let from: Vec<u16> = temporary.as_os_str().encode_wide().chain(Some(0)).collect();
-            let to: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
-            if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 1 | 8) } == 0 {
-                return Err(std::io::Error::last_os_error().to_string());
-            }
-        }
-        #[cfg(not(windows))]
-        std::fs::rename(temporary, path).map_err(|e| e.to_string())?;
-        Ok(())
+        crate::model::atomic_write_json(path, &bytes)
     }
 }
 

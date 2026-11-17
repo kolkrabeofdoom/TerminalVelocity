@@ -2,7 +2,7 @@
 
 TerminalVelocity ist ein Windows-Terminal mit Tabs, geteilten Ansichten, SSH- und WinRM-Verbindungen, einem lokalen Texteditor und Bildanzeige. Vorhandene KI-Kommandozeilenprogramme lassen sich als eigene Sitzungen starten; markierte Terminalausgaben können nach Prüfung an sie übergeben werden.
 
-**Version 0.9.2 · Windows x64 · MIT-Lizenz**
+**Version 0.9.3 · Windows x64 · MIT-Lizenz**
 
 [Download und Release Notes](https://github.com/kolkrabeofdoom/TerminalVelocity/releases/latest) · [Änderungsverlauf](CHANGELOG.md) · [Prüfbericht](VERIFICATION.md)
 
@@ -320,7 +320,7 @@ Für einen vollständigen Programmordner einschließlich der Hilfsskripte ist `b
 
 Der Ablauf prüft Formatierung, die Haupttests einschließlich ausdrücklich aktivierter Offline-Integrationstests, die vte-Parser-Tests, den Release-Build und vier reale Windows-PTY-Prüfungen: Ordnerübernahme, Sitzungsneustart, Projektprofile und Verlaufssuche. PowerShell 7 und OpenSSH müssen lokal verfügbar sein. Die Tests stellen keine Remote-Verbindung her und senden keine KI-Anfragen; notwendige Downloads beim Vorbereiten des Builds benötigen Internet.
 
-Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die lokale Suite umfasst derzeit **112 Tests** plus die vier PTY-Prüfungen.
+Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die lokale Suite umfasst derzeit **114 Tests** plus die vier PTY-Prüfungen.
 
 Weitere Diagnosemodi der EXE sind `--smoke-test`, `--directory-test`, `--restart-test`, `--profile-test` und `--search-test`. Sie erzeugen Berichte neben der EXE. Für `--handoff-test` zuvor mit `--features test-tools` bauen und die erzeugte `prompt-probe.exe` neben die Terminal-EXE legen. Dieser Test verwendet ein lokales Probeprogramm statt einer KI-Anfrage.
 
@@ -330,7 +330,7 @@ Weitere Diagnosemodi der EXE sind `--smoke-test`, `--directory-test`, `--restart
 ./scripts/package.ps1
 ```
 
-Das Skript führt Tests und Build aus, ergänzt die festgeschriebenen PowerShell- und ConPTY-Dateien und erstellt `dist/TerminalVelocity-0.9.2-Windows-x64.zip` sowie eine `.sha256`-Datei. Downloadquellen und Prüfsummen stehen in [powershell-source.json](shells/powershell-source.json) und [conpty-source.json](shells/conpty-source.json).
+Das Skript führt Tests und Build aus, ergänzt die festgeschriebenen PowerShell- und ConPTY-Dateien und erstellt `dist/TerminalVelocity-0.9.3-Windows-x64.zip` sowie eine `.sha256`-Datei. Downloadquellen und Prüfsummen stehen in [powershell-source.json](shells/powershell-source.json) und [conpty-source.json](shells/conpty-source.json).
 
 Mit `-OutputDirectory <neuer Ordner>` wird ein anderes Ziel verwendet; bestehende Paketordner werden nicht überschrieben. `-SkipBuild` ist nur für einen bereits zum aktuellen Quellstand passenden Release-Build gedacht. KI-CLIs, persönliche Einstellungen und Zugangsdaten werden nicht eingepackt.
 
@@ -339,7 +339,7 @@ Mit `-OutputDirectory <neuer Ordner>` wird ein anderes Ziel verwendet; bestehend
 Die ZIP-Prüfsumme lässt sich mit PowerShell ermitteln und mit der veröffentlichten `.sha256`-Datei vergleichen:
 
 ```powershell
-Get-FileHash .\TerminalVelocity-0.9.2-Windows-x64.zip -Algorithm SHA256
+Get-FileHash .\TerminalVelocity-0.9.3-Windows-x64.zip -Algorithm SHA256
 ```
 
 ## Technik und Lizenzen

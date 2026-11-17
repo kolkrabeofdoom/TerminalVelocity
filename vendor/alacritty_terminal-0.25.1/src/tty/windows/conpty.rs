@@ -128,7 +128,9 @@ pub fn new(config: &Options, window_size: WindowSize) -> Result<Pty> {
         )
     };
 
-    assert_eq!(result, S_OK);
+    if result != S_OK {
+        return Err(Error::from_raw_os_error(result));
+    }
 
     let mut success;
 
@@ -302,7 +304,9 @@ fn add_windows_env_key_value_to_block(block: &mut Vec<u16>, key: &OsStr, value: 
 impl OnResize for Conpty {
     fn on_resize(&mut self, window_size: WindowSize) {
         let result = unsafe { (self.api.resize)(self.handle, window_size.into()) };
-        assert_eq!(result, S_OK);
+        if result != S_OK {
+            warn!("ResizePseudoConsole failed with HRESULT {result:#x}");
+        }
     }
 }
 

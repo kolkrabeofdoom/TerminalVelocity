@@ -1,6 +1,15 @@
-# TerminalVelocity 0.9.2
+# TerminalVelocity 0.9.3
 
-Erstes veröffentlichtes GitHub-Release für Windows x64. Es bündelt die bisher entwickelten Funktionen in einem portablen Paket. Die vorherigen Versionsstände waren als Git-Tags verfügbar. Gegenüber 0.9.1 wurde die README vollständig neu gegliedert und um eine zusammenhängende Bedienungs-, Installations- und Build-Dokumentation ergänzt; es gibt keine neue Terminalfunktion in diesem Versionsschritt.
+Security-Hardening- und Wartungs-Release für Windows x64. Alle bestehenden Funktionen bleiben erhalten; zusätzlich wurden sechs Befunde aus dem Sicherheitsreview gehärtet und durch neue Regressionstests abgesichert.
+
+## Sicherheitshärtungen in 0.9.3
+
+- **Link-Öffnung (`Strg+Klick`)**: Beschränkung auf wohlgeformte `http://`- und `https://`-URLs mit gültigem Host; Blockade von `file://`- und Fremdprotokoll-Schemata sowie Beseitigung eines möglichen Prozess-Panics bei fehlerhaften Links.
+- **Schutz vor UNC-/SMB-Netzwerkproben**: Ablehnung von UNC- (`\\server\share`) und Windows-Gerätepfaden (`\\.\...`) bei `TERMINALVELOCITY_CWD:`-Titeln, Rechtsklick-Bildpfaden, Hintergrundbildern, SSH-Schlüsseln und benutzerdefinierten Shell-Pfaden (verhindert unbeabsichtigte NTLM-Authentifizierungen und GUI-Blockaden).
+- **Sichere `PATH`-Reihenfolge**: In PowerShell-Sitzungen behält der System-`PATH` (`Machine` / `System32`) Vorrang vor dem Benutzer-`PATH` (`User`).
+- **Validierung von Paket- und Workspace-Pfaden**: Schutz vor Pfad-Traversierung (`..`) beim Auflösen von npm-`package.json`-Startdateien sowie erweiterte Pfadvalidierung beim Laden von `workspace.json` und `profiles.json`.
+- **Robuste ConPTY-Fehlerbehandlung**: Rückgabe regulärer Fehlerwerte statt Prozessabbruch (`assert_eq!`) bei `CreatePseudoConsole` / `ResizePseudoConsole`.
+- **Atomare Konfigurationsspeicherung**: Speichern von `workspace.json` und `profiles.json` über eindeutige Staging-Dateien mit `create_new(true)`, `sync_all()` und Symlink-Schutz; Entfernung des Debug-Schreibzugriffs `transparency-status.txt`.
 
 ## Enthaltene Funktionen
 
@@ -16,7 +25,7 @@ Erstes veröffentlichtes GitHub-Release für Windows x64. Es bündelt die bisher
 
 ## Download und Start
 
-`TerminalVelocity-0.9.2-Windows-x64.zip` vollständig in einen beschreibbaren Ordner entpacken und `TerminalVelocity.exe` starten. Bitte auch `conpty.dll`, `OpenConsole.exe` und den Ordner `shells` mitnehmen.
+`TerminalVelocity-0.9.3-Windows-x64.zip` vollständig in einen beschreibbaren Ordner entpacken und `TerminalVelocity.exe` starten. Bitte auch `conpty.dll`, `OpenConsole.exe` und den Ordner `shells` mitnehmen.
 
 Enthalten sind PowerShell 7.6.7, Microsoft ConPTY 1.25.260930003, das Git-Bash-Startskript, eine Sixel-Demo, Dokumentation und Lizenzdateien. Git Bash, OpenSSH und KI-CLIs sind nicht enthalten und werden bei Bedarf separat benötigt. Persönliche Einstellungen, SSH-Schlüssel und Zugangsdaten sind nicht Bestandteil des Pakets.
 
@@ -34,6 +43,6 @@ Die beigefügte `.sha256`-Datei enthält die ZIP-Prüfsumme. `BUILD-INFO.json` i
 
 ## Prüfung
 
-Der Release-Stand hat den lokalen Windows-CI-Ablauf bestanden: Formatierung, 112 Tests, Release-Build und vier zusätzliche PTY-Prüfungen für Ordnerübernahme, Neustart, Projektprofile und Verlaufssuche. Die Tests senden keine KI-Anfragen und bauen keine echten Remote-Verbindungen auf. Einzelheiten und die Grenzen der Prüfung stehen im mitgelieferten `VERIFICATION.md`.
+Der Release-Stand hat den lokalen Windows-CI-Ablauf bestanden: Formatierung, 114 Tests, Release-Build und vier zusätzliche PTY-Prüfungen für Ordnerübernahme, Neustart, Projektprofile und Verlaufssuche. Die Tests senden keine KI-Anfragen und bauen keine echten Remote-Verbindungen auf. Einzelheiten und die Grenzen der Prüfung stehen im mitgelieferten `VERIFICATION.md`.
 
-Die vollständige Bedienung ist in der README des Release-Tags dokumentiert: https://github.com/kolkrabeofdoom/TerminalVelocity/blob/v0.9.2/README.md
+Die vollständige Bedienung ist in der README des Release-Tags dokumentiert: https://github.com/kolkrabeofdoom/TerminalVelocity/blob/v0.9.3/README.md
