@@ -80,7 +80,8 @@ pub enum Shell {
     GitBash,
     Codex,
     Claude,
-    Gemini,
+    #[serde(alias = "Gemini")]
+    Antigravity,
     OpenAI,
 }
 
@@ -91,13 +92,13 @@ impl Shell {
         Self::GitBash,
         Self::Codex,
         Self::Claude,
-        Self::Gemini,
+        Self::Antigravity,
         Self::OpenAI,
     ];
     pub fn is_ai(self) -> bool {
         matches!(
             self,
-            Self::Codex | Self::Claude | Self::Gemini | Self::OpenAI
+            Self::Codex | Self::Claude | Self::Antigravity | Self::OpenAI
         )
     }
     pub fn label(self) -> &'static str {
@@ -107,7 +108,7 @@ impl Shell {
             Self::GitBash => "Git Bash",
             Self::Codex => "Codex CLI",
             Self::Claude => "Claude Code",
-            Self::Gemini => "Gemini CLI",
+            Self::Antigravity => "Antigravity CLI",
             Self::OpenAI => "OpenAI API CLI",
         }
     }
@@ -148,12 +149,14 @@ impl Shell {
             Self::GitBash => &["bash.exe"],
             Self::Codex => &["codex.exe", "codex.cmd"],
             Self::Claude => &["claude.exe", "claude.cmd"],
-            Self::Gemini => &["gemini.exe", "gemini.cmd"],
+            Self::Antigravity => &["agy.exe", "agy.cmd"],
             Self::OpenAI => &["openai.exe"],
         };
         // User installations also resolve when the desktop inherited an older PATH.
         if self.is_ai() {
             for directory in [
+                std::env::var_os("LOCALAPPDATA").map(|root| PathBuf::from(root).join("agy/bin")),
+                std::env::var_os("USERPROFILE").map(|root| PathBuf::from(root).join(".gemini/bin")),
                 std::env::var_os("APPDATA").map(|root| PathBuf::from(root).join("npm")),
                 std::env::var_os("USERPROFILE").map(|root| PathBuf::from(root).join(".local/bin")),
                 std::env::var_os("LOCALAPPDATA")
@@ -215,6 +218,7 @@ impl Shell {
             Self::PowerShell => "shells/powershell/pwsh.exe",
             Self::GitBash => "shells/git/bin/bash.exe",
             Self::Codex => "shells/codex/bin/codex.exe",
+            Self::Antigravity => "shells/agy/bin/agy.exe",
             _ => return None,
         };
         let path = app_dir.join(relative);
@@ -240,6 +244,12 @@ impl Shell {
                 script.push_str(&format!(
                     " Set-Alias -Name codex -Value '{}' -Scope Global;",
                     codex.to_string_lossy().replace('\'', "''")
+                ));
+            }
+            if let Some(agy) = Self::Antigravity.resolve(None, app_dir) {
+                script.push_str(&format!(
+                    " Set-Alias -Name agy -Value '{}' -Scope Global;",
+                    agy.to_string_lossy().replace('\'', "''")
                 ));
             }
             script.push_str(" $global:TerminalVelocitySavedPrompt = $function:prompt; function global:prompt { if ($PWD.Provider.Name -eq 'FileSystem') { [Console]::Write(([char]27).ToString() + ']0;TERMINALVELOCITY_CWD:' + $PWD.ProviderPath + [char]7) }; if ($global:TerminalVelocitySavedPrompt) { & $global:TerminalVelocitySavedPrompt } else { 'PS ' + $PWD.Path + '> ' } };");
@@ -276,7 +286,7 @@ impl Shell {
                 ],
             ));
         }
-        if *self == Self::Codex
+        if matches!(self, Self::Codex | Self::Antigravity)
             && executable
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
@@ -596,16 +606,20 @@ mod tests {
     #[test]
     fn ai_workspace_roundtrip_keeps_provider_and_custom_path() {
         let mut workspace = Workspace::default();
-        workspace.default_shell = Shell::Gemini;
-        workspace.shell_paths[Shell::Gemini as usize] = "tools/gemini.cmd".into();
+        workspace.default_shell = Shell::Antigravity;
+        workspace.shell_paths[Shell::Antigravity as usize] = "tools/agy.exe".into();
         let encoded = serde_json::to_string(&workspace).unwrap();
         let mut restored: Workspace = serde_json::from_str(&encoded).unwrap();
         restored.validate().unwrap();
-        assert_eq!(restored.default_shell, Shell::Gemini);
+        assert_eq!(restored.default_shell, Shell::Antigravity);
         assert_eq!(
-            restored.shell_paths[Shell::Gemini as usize],
-            "tools/gemini.cmd"
+            restored.shell_paths[Shell::Antigravity as usize],
+            "tools/agy.exe"
         );
+        // Legacy "Gemini" entries transparently migrate to Antigravity.
+        let legacy: Workspace =
+            serde_json::from_str(r#"{"version":1,"default_shell":"Gemini","tabs":[]}"#).unwrap();
+        assert_eq!(legacy.default_shell, Shell::Antigravity);
     }
     #[test]
     fn native_codex_launch_does_not_require_a_shell_or_node() {

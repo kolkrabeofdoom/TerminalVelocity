@@ -78,7 +78,7 @@ Neue Ausgabe wird während der Suche berücksichtigt. Beim Bereichswechsel oder 
 | Git Bash | Bash aus einer vorhandenen Git-for-Windows-Installation. |
 | Codex CLI | Separat installierte und eingerichtete CLI. |
 | Claude Code | Separat installierte und eingerichtete CLI. |
-| Gemini CLI | Separat installierte und eingerichtete CLI. |
+| Antigravity CLI | Separat installierte und eingerichtete CLI (`agy.exe`). |
 | OpenAI API CLI | Vorhandenes `openai.exe`; für die Textübergabe sind Modell-ID und eingerichteter API-Zugang erforderlich. |
 
 Unter **Einstellungen → Shells und KI-CLIs** werden gefundene Programme angezeigt. Leere Felder verwenden die automatische Suche; alternativ vollständige EXE-/CMD-Pfade oder Pfade relativ zum Programmordner eintragen. Für OpenSSH gibt es ein eigenes Feld. **Speichern und fehlgeschlagene Sitzungen neu starten** übernimmt die Einstellungen und versucht zuvor fehlgeschlagene Starts erneut. Laufende Sitzungen bleiben aktiv; geänderte Pfade gelten für neue Starts.

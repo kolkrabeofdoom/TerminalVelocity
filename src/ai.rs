@@ -1,7 +1,12 @@
 use crate::model::Shell;
 use std::path::{Path, PathBuf};
 
-pub const PROVIDERS: [Shell; 4] = [Shell::Codex, Shell::Claude, Shell::Gemini, Shell::OpenAI];
+pub const PROVIDERS: [Shell; 4] = [
+    Shell::Codex,
+    Shell::Claude,
+    Shell::Antigravity,
+    Shell::OpenAI,
+];
 pub const MAX_PROMPT_UNITS: usize = 10_000;
 
 #[derive(Clone, Copy, Debug)]
@@ -92,7 +97,7 @@ impl Draft {
 fn prompt_args(provider: Shell, text: &str, model: &str) -> Result<Vec<String>, String> {
     match provider {
         Shell::Codex | Shell::Claude => Ok(vec!["--".into(), text.into()]),
-        Shell::Gemini => Ok(vec![format!("--prompt-interactive={text}")]),
+        Shell::Antigravity => Ok(vec![format!("--prompt-interactive={text}")]),
         Shell::OpenAI => {
             if model.trim().is_empty() {
                 return Err("Für die OpenAI API bitte eine Modell-ID angeben.".into());
@@ -121,7 +126,6 @@ fn node_entry(wrapper: &Path, provider: Shell) -> Result<(PathBuf, PathBuf), Str
     let (package, bin) = match provider {
         Shell::Codex => ("@openai/codex", "codex"),
         Shell::Claude => ("@anthropic-ai/claude-code", "claude"),
-        Shell::Gemini => ("@google/gemini-cli", "gemini"),
         _ => return Err("Für diesen Anbieter bitte eine native EXE konfigurieren.".into()),
     };
     let root = directory.join("node_modules").join(package);
@@ -205,7 +209,7 @@ mod tests {
             assert_eq!(prompt_args(provider, text, "").unwrap(), ["--", text]);
         }
         assert_eq!(
-            prompt_args(Shell::Gemini, text, "").unwrap(),
+            prompt_args(Shell::Antigravity, text, "").unwrap(),
             [format!("--prompt-interactive={text}")]
         );
         assert_eq!(

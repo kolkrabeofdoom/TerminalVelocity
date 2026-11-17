@@ -10,11 +10,12 @@ Security-Hardening- und Wartungs-Release für Windows x64. Alle bestehenden Funk
 - **Validierung von Paket- und Workspace-Pfaden**: Schutz vor Pfad-Traversierung (`..`) beim Auflösen von npm-`package.json`-Startdateien sowie erweiterte Pfadvalidierung beim Laden von `workspace.json` und `profiles.json`.
 - **Robuste ConPTY-Fehlerbehandlung**: Rückgabe regulärer Fehlerwerte statt Prozessabbruch (`assert_eq!`) bei `CreatePseudoConsole` / `ResizePseudoConsole`.
 - **Atomare Konfigurationsspeicherung**: Speichern von `workspace.json` und `profiles.json` über eindeutige Staging-Dateien mit `create_new(true)`, `sync_all()` und Symlink-Schutz; Entfernung des Debug-Schreibzugriffs `transparency-status.txt`.
+- **Antigravity CLI (`agy.exe`) statt Gemini CLI**: Direkte Unterstützung und automatische Erkennung von `agy.exe` (`%LOCALAPPDATA%\agy\bin\agy.exe` / `%USERPROFILE%\.gemini\bin\agy.exe`), einschließlich PowerShell-Alias `agy` und KI-Übergabe per `--prompt-interactive`. Vorhandene `"Gemini"`-Einträge in `workspace.json` und `profiles.json` werden automatisch übernommen.
 
 ## Enthaltene Funktionen
 
 - Tabs und verschachtelte Teilungen mit verschiebbaren Trennlinien, Übernahme lokaler Arbeitsordner und Neustart einzelner Sitzungen.
-- PowerShell 7, CMD und optional Git Bash sowie Startmöglichkeiten für separat installierte Codex-, Claude-, Gemini- und OpenAI-CLIs.
+- PowerShell 7, CMD und optional Git Bash sowie Startmöglichkeiten für separat installierte Codex-, Claude-, Antigravity- und OpenAI-CLIs.
 - Textauswahl, Zwischenablage, erkannte Textlinks und wörtliche Suche im Terminalverlauf mit Treffernavigation.
 - Bearbeitbare Übergabe markierter Terminalausgabe an eine neue KI-Sitzung, einschließlich vier erklärender Schnellaktionen. Gesendet wird erst nach Bestätigung im Entwurf.
 - SSH über OpenSSH und PowerShell-Remoting über WinRM mit gespeicherten Verbindungen und Favoriten.

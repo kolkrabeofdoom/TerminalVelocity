@@ -2049,9 +2049,9 @@ fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
         }
         drop(source);
         let text = format!("{selected}\n--help\n'ü' & %PATH% $(whoami) ; \"text\" C:\\end\\");
-        if let Some(gemini) = Shell::Gemini.resolve(None, &base) {
-            let draft = ai::Draft::new(text.clone(), root.clone(), Shell::Gemini);
-            let (program, args) = draft.command(gemini)?;
+        if let Some(agy) = Shell::Antigravity.resolve(None, &base) {
+            let draft = ai::Draft::new(text.clone(), root.clone(), Shell::Antigravity);
+            let (program, args) = draft.command(agy)?;
             use std::os::windows::process::CommandExt;
             let prefix = &args[..args.len() - 1];
             let output = std::process::Command::new(program)
@@ -2060,7 +2060,7 @@ fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
                 .creation_flags(0x08000000)
                 .output()?;
             if !output.status.success() {
-                return Err("Direkter Gemini-/Node-Start fehlgeschlagen".into());
+                return Err("Direkter Antigravity-Start fehlgeschlagen".into());
             }
         }
         for (provider, text) in ai::PROVIDERS.into_iter().flat_map(|provider| {

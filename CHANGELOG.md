@@ -8,6 +8,7 @@
 - **Pfad- & Konfigurationsvalidierung**: Schutz vor Pfad-Traversierung (`..`) beim Auslesen von `package.json` in `node_entry`; strikte Prüfung von Ordner- und Programmpfaden in `Workspace::validate()`.
 - **ConPTY-Fehlerbehandlung**: Fehler bei `CreatePseudoConsole` und `ResizePseudoConsole` werden sauber als `io::Error` bzw. Warnung verarbeitet statt die Anwendung per `assert_eq!` zu beenden.
 - **Atomares Speichern & Bereinigung**: `workspace.json` und `profiles.json` werden über eindeutige Staging-Dateien (`create_new(true)`, `sync_all()`, Symlink-Prüfung) atomar ersetzt; der Debug-Schreibzugriff auf `transparency-status.txt` wurde entfernt.
+- **Antigravity CLI (`agy.exe`)**: Ersetzt den bisherigen Gemini-CLI-Eintrag durch die native Antigravity CLI (`agy.exe`) inklusive Auto-Erkennung unter `%LOCALAPPDATA%\agy\bin` und `%USERPROFILE%\.gemini\bin`, PowerShell-Alias `agy`, KI-Übergabe über `--prompt-interactive` und automatischer Migration bestehender `"Gemini"`-Konfigurationseinträge.
 
 ## 0.9.2 – 22. Oktober 2026
 
