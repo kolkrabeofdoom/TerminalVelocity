@@ -1,5 +1,11 @@
 # Änderungen
 
+## 2.0.0 – PHP-Edition
+
+- **Engine-Wechsel**: Rust-Quellen, `Cargo.toml`, `Cargo.lock`, `vendor/` und die 116 Tests wurden durch `php2/TerminalVelocity.php` ersetzt.
+- **PHP 2.0**: Neue Laufzeit mit nativer ConPTY-Unterstützung und stabiler ABI.
+- **Build und CI**: `scripts/build.ps1` und der Windows-Workflow führen jetzt `composer selftest` aus.
+
 ## 1.0.0 – Voll-Release
 
 - **Hilfe-Sektion (`F1` / „Hilfe“)**: Integrierte Übersicht aller Tastenkürzel und Bedienungsabläufe direkt in der Anwendung.
