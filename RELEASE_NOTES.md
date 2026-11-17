@@ -11,6 +11,10 @@ Security-Hardening- und Wartungs-Release für Windows x64. Alle bestehenden Funk
 - **Robuste ConPTY-Fehlerbehandlung**: Rückgabe regulärer Fehlerwerte statt Prozessabbruch (`assert_eq!`) bei `CreatePseudoConsole` / `ResizePseudoConsole`.
 - **Atomare Konfigurationsspeicherung**: Speichern von `workspace.json` und `profiles.json` über eindeutige Staging-Dateien mit `create_new(true)`, `sync_all()` und Symlink-Schutz; Entfernung des Debug-Schreibzugriffs `transparency-status.txt`.
 - **Antigravity CLI (`agy.exe`) statt Gemini CLI**: Direkte Unterstützung und automatische Erkennung von `agy.exe` (`%LOCALAPPDATA%\agy\bin\agy.exe` / `%USERPROFILE%\.gemini\bin\agy.exe`), einschließlich PowerShell-Alias `agy` und KI-Übergabe per `--prompt-interactive`. Vorhandene `"Gemini"`-Einträge in `workspace.json` und `profiles.json` werden automatisch übernommen.
+- **Dateipfade & Stacktraces im Editor öffnen**: Rechtsklick auf lokale Dateipfade oder `pfad:zeile(:spalte)`-Ausgaben im Terminal öffnet die Datei direkt im integrierten Editor und springt zur Zielzeile.
+- **Terminalauswahl im Editor öffnen**: Markierter Terminaltext lässt sich per Rechtsklick direkt als ungespeichertes Scratchpad-Dokument im Editor öffnen.
+- **Befehlspalette (`Strg+Umschalt+P` / „Befehle …“)**: Schnelles Filtern und Ausführen von Shells/KI-CLIs (Tab oder Split), gespeicherten SSH-/WinRM-Verbindungen, Projektprofilen, offenen Tabs und Grafik-Presets.
+- **Hintergrund-Benachrichtigungen (`●`)**: Visuelle Markierung an Hintergrund-Tabs und inaktiven Bereichen bei `BEL`-Signalen oder Prozessende.
 
 ## Enthaltene Funktionen
 
@@ -44,6 +48,6 @@ Die beigefügte `.sha256`-Datei enthält die ZIP-Prüfsumme. `BUILD-INFO.json` i
 
 ## Prüfung
 
-Der Release-Stand hat den lokalen Windows-CI-Ablauf bestanden: Formatierung, 114 Tests, Release-Build und vier zusätzliche PTY-Prüfungen für Ordnerübernahme, Neustart, Projektprofile und Verlaufssuche. Die Tests senden keine KI-Anfragen und bauen keine echten Remote-Verbindungen auf. Einzelheiten und die Grenzen der Prüfung stehen im mitgelieferten `VERIFICATION.md`.
+Der Release-Stand hat den lokalen Windows-CI-Ablauf bestanden: Formatierung, 116 Tests, Release-Build und vier zusätzliche PTY-Prüfungen für Ordnerübernahme, Neustart, Projektprofile und Verlaufssuche. Die Tests senden keine KI-Anfragen und bauen keine echten Remote-Verbindungen auf. Einzelheiten und die Grenzen der Prüfung stehen im mitgelieferten `VERIFICATION.md`.
 
 Die vollständige Bedienung ist in der README des Release-Tags dokumentiert: https://github.com/kolkrabeofdoom/TerminalVelocity/blob/v0.9.3/README.md

@@ -9,6 +9,10 @@
 - **ConPTY-Fehlerbehandlung**: Fehler bei `CreatePseudoConsole` und `ResizePseudoConsole` werden sauber als `io::Error` bzw. Warnung verarbeitet statt die Anwendung per `assert_eq!` zu beenden.
 - **Atomares Speichern & Bereinigung**: `workspace.json` und `profiles.json` werden über eindeutige Staging-Dateien (`create_new(true)`, `sync_all()`, Symlink-Prüfung) atomar ersetzt; der Debug-Schreibzugriff auf `transparency-status.txt` wurde entfernt.
 - **Antigravity CLI (`agy.exe`)**: Ersetzt den bisherigen Gemini-CLI-Eintrag durch die native Antigravity CLI (`agy.exe`) inklusive Auto-Erkennung unter `%LOCALAPPDATA%\agy\bin` und `%USERPROFILE%\.gemini\bin`, PowerShell-Alias `agy`, KI-Übergabe über `--prompt-interactive` und automatischer Migration bestehender `"Gemini"`-Konfigurationseinträge.
+- **Lokale Dateipfade & Stacktraces direkt im Editor öffnen**: Rechtsklick auf Dateipfade oder Compiler-/Stacktrace-Einträge (`pfad:zeile` / `pfad:zeile:spalte`) in der Terminalausgabe öffnet die lokale Textdatei direkt im integrierten Editor und springt zur angegebenen Zeile.
+- **Auswahl im Editor öffnen**: Rechtsklick auf markierten Terminaltext übernimmt die Auswahl als neues, ungespeichertes Dokument (Scratchpad) in den integrierten Editor.
+- **Befehlspalette (`Strg+Umschalt+P` / „Befehle …“)**: Zentrale Schnellauswahl mit Stichwortfilter für Shells, KI-CLIs (Tab oder Split), gespeicherte SSH-/WinRM-Verbindungen, Projektprofile, offene Tabs, Editor, Suche, Einstellungen und Grafik-Presets.
+- **Hintergrund-Aktivitätsanzeige (`●`)**: Farbiger Indikator in der Tableiste und Bereichsüberschrift, wenn ein nicht fokussierter Bereich ein Glockensignal (`BEL`) sendet oder beendet wird.
 
 ## 0.9.2 – 22. Oktober 2026
 

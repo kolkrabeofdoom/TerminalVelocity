@@ -52,6 +52,18 @@ Neue lokale Tabs und Teilungen übernehmen den zuletzt gemeldeten Arbeitsordner 
 
 Mit **×** im Bereichskopf wird der Bereich geschlossen. Dabei endet auch seine Sitzung. Die Anwendung unterstützt insgesamt bis zu **32 Tabs und 64 Bereiche**.
 
+Wenn in einem Hintergrund-Tab oder einem nicht fokussierten Bereich ein Glockensignal (`BEL` / `\a`) eingeht oder der Prozess endet, zeigt die Tableiste beziehungsweise die Bereichsüberschrift einen farbigen Aktivitätspunkt (**`●`**) an. Sobald der Tab oder Bereich ausgewählt wird, erlischt die Markierung automatisch.
+
+### Befehlspalette
+
+Mit **Strg+Umschalt+P** oder über **Befehle …** in der oberen Werkzeugleiste öffnet sich die Befehlspalette. Über das Suchfeld lassen sich alle wichtigen Aktionen nach Stichwörtern filtern und mit **Enter** (oder per Klick) sofort ausführen:
+
+- Neue Tabs oder geteilte Bereiche mit einer bestimmten Shell oder KI-CLI starten
+- Gespeicherte SSH- und WinRM-Verbindungen direkt in einem neuen Tab öffnen
+- Gespeicherte Projektprofile öffnen oder den aktuellen Aufbau sichern
+- Zwischen offenen Tabs wechseln, den Editor, die Verlaufssuche oder die Einstellungen öffnen
+- Grafik-Presets (Aus, Aurora, Phosphor, Deep Space) direkt umschalten
+
 ## Terminalbedienung und Suche
 
 Das Terminal verarbeitet Text, ANSI-Farben und Steuersequenzen. Konsolenprogramme können den alternativen Bildschirm und Mausberichte verwenden. Der Textverlauf umfasst bis zu **10.000 zusätzliche Zeilen je Bereich**.
@@ -140,6 +152,11 @@ Bis zu **32 Projektprofile** mit Namen von **1 bis 80 Zeichen** sind möglich. *
 ## Lokaler Texteditor
 
 **Editor** öffnet einen eigenen Tab für ein Dokument. Die Terminalprozesse laufen währenddessen weiter. **Neu**, **Öffnen …**, **Speichern**, **Speichern unter …** und **Editor schließen** stehen in der Editorleiste bereit. Der Dateidialog startet im lokalen Ordner des aktiven Terminalbereichs.
+
+Aus dem Terminal heraus führen zwei direkte Wege in den Editor:
+
+- **Rechtsklick auf einen lokalen Dateipfad oder Compiler-/Stacktrace-Eintrag (`pfad:zeile` bzw. `pfad:zeile:spalte`) → Datei im Editor öffnen**: Öffnet die erkannte lokale Textdatei direkt im Editor und springt automatisch zur angegebenen Zeile.
+- **Rechtsklick bei markiertem Terminaltext → Auswahl im Editor öffnen**: Übernimmt die aktuelle Textauswahl als neues, ungespeichertes Dokument in den Editor (etwa zum Durchsuchen, Bearbeiten oder Speichern längerer Log- und Befehlsausgaben).
 
 Der Editor bietet Zeilennummern, horizontales und vertikales Scrollen, Einrückung mit Tab, Undo/Redo und eine wörtliche, groß-/kleinschreibungssensitive Suche. **Nächster Treffer** markiert den gefundenen Text. Einfache Syntaxfarben werden anhand der Endung für PowerShell, Bash, JSON, TOML und Markdown gewählt.
 
@@ -236,6 +253,7 @@ Hintergrundbild und Effekt-Preset sind unabhängig. Das Bild liegt hinter Termin
 
 | Aktion | Tastenkürzel |
 | --- | --- |
+| Befehlspalette | Strg+Umschalt+P |
 | Neuer Tab | Strg+Umschalt+T |
 | Bereiche nebeneinander | Strg+Umschalt+D |
 | Bereiche untereinander | Strg+Umschalt+E |
@@ -320,7 +338,7 @@ Für einen vollständigen Programmordner einschließlich der Hilfsskripte ist `b
 
 Der Ablauf prüft Formatierung, die Haupttests einschließlich ausdrücklich aktivierter Offline-Integrationstests, die vte-Parser-Tests, den Release-Build und vier reale Windows-PTY-Prüfungen: Ordnerübernahme, Sitzungsneustart, Projektprofile und Verlaufssuche. PowerShell 7 und OpenSSH müssen lokal verfügbar sein. Die Tests stellen keine Remote-Verbindung her und senden keine KI-Anfragen; notwendige Downloads beim Vorbereiten des Builds benötigen Internet.
 
-Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die lokale Suite umfasst derzeit **114 Tests** plus die vier PTY-Prüfungen.
+Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die lokale Suite umfasst derzeit **116 Tests** plus die vier PTY-Prüfungen.
 
 Weitere Diagnosemodi der EXE sind `--smoke-test`, `--directory-test`, `--restart-test`, `--profile-test` und `--search-test`. Sie erzeugen Berichte neben der EXE. Für `--handoff-test` zuvor mit `--features test-tools` bauen und die erzeugte `prompt-probe.exe` neben die Terminal-EXE legen. Dieser Test verwendet ein lokales Probeprogramm statt einer KI-Anfrage.
 

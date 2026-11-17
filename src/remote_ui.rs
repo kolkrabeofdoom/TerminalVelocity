@@ -1,7 +1,7 @@
 use super::*;
 
 impl TerminalApp {
-    fn open_remote(
+    pub(super) fn open_remote(
         &mut self,
         connection: remote::Connection,
         placement: usize,

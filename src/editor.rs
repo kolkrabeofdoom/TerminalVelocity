@@ -184,8 +184,13 @@ fn atomic_save(path: &Path, bytes: &[u8], expected: Option<&[u8]>) -> Result<(),
     result
 }
 
+pub enum Request {
+    OpenFile(PathBuf, Option<usize>),
+    OpenSelection(String),
+}
+
 enum Pending {
-    Replace(Document),
+    Replace(Document, Option<usize>),
     Close,
     Exit,
 }
@@ -202,7 +207,194 @@ pub struct Editor {
     search: bool,
     focus_search: bool,
     next_match: usize,
+    jump_line: Option<usize>,
     message: String,
+}
+
+pub fn line_char_range(text: &str, line: usize) -> std::ops::Range<usize> {
+    let target = line.saturating_sub(1);
+    let mut char_offset = 0;
+    for (index, part) in text.split('\n').enumerate() {
+        let len = part.chars().count();
+        if index == target {
+            return char_offset..char_offset + len;
+        }
+        char_offset += len + 1;
+    }
+    let total = text.chars().count();
+    total..total
+}
+
+/// Resolve a clicked local text file path and optional 1-based `:line` / `:line:col` suffix.
+pub fn path_at(text: &str, offset: usize, base: &Path) -> Option<(PathBuf, Option<usize>)> {
+    if text.len() > 8192 || offset >= text.len() || !text.is_char_boundary(offset) {
+        return None;
+    }
+    let mut checked = 0usize;
+    let mut check = |raw: &str| -> Option<(PathBuf, Option<usize>)> {
+        checked += 1;
+        if checked > 64 {
+            return None;
+        }
+        parse_path_and_line(raw, base)
+    };
+
+    // 1. Check quoted spans containing `offset` (plus any immediately trailing `:line(:col)`).
+    for quote in ['"', '\''] {
+        let mut search_from = 0;
+        while let Some(rel_open) = text[search_from..].find(quote) {
+            let open = search_from + rel_open;
+            let content_start = open + 1;
+            let Some(rel_close) = text[content_start..].find(quote) else {
+                break;
+            };
+            let close = content_start + rel_close;
+            let mut end = close + 1;
+            for (i, c) in text[end..].char_indices() {
+                if c.is_ascii_digit() || c == ':' {
+                    end = close + 1 + i + c.len_utf8();
+                } else {
+                    break;
+                }
+            }
+            if offset >= open && offset < end {
+                if let Some(found) = check(&text[open..end]) {
+                    return Some(found);
+                }
+            }
+            search_from = close + 1;
+        }
+    }
+
+    // 2. Check the whitespace/bracket-delimited token around `offset`.
+    let is_delim = |c: char| {
+        c.is_whitespace() || matches!(c, '(' | ')' | '[' | ']' | '<' | '>' | '"' | ',' | ';')
+    };
+    let start = text[..offset]
+        .char_indices()
+        .rev()
+        .find(|(_, c)| is_delim(*c))
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let end = text[offset..]
+        .char_indices()
+        .find(|(_, c)| is_delim(*c))
+        .map(|(i, _)| offset + i)
+        .unwrap_or(text.len());
+    if start < end {
+        if let Some(found) = check(&text[start..end]) {
+            return Some(found);
+        }
+    }
+
+    // 3. Check unquoted multi-word paths in directory listings or compiler lines
+    //    (e.g. `-a--- ... Skript O'Brien ü.ps1` or `  --> Skript O'Brien ü.ps1:2:5: Fehler`).
+    let line_end = text.trim_end().len();
+    if offset < line_end {
+        let mut starts = vec![0];
+        let mut ends = Vec::new();
+        for (i, c) in text[..line_end].char_indices() {
+            let next = i + c.len_utf8();
+            if next <= offset && (c.is_whitespace() || matches!(c, '(' | '[' | '"' | '\'')) {
+                starts.push(next);
+            }
+            if i > offset && (c.is_whitespace() || matches!(c, ')' | ']' | '"' | '\'' | ',' | ';'))
+            {
+                ends.push(i);
+            }
+        }
+        ends.push(line_end);
+        for s in starts {
+            for &e in ends.iter().rev() {
+                if s < e {
+                    if let Some(found) = check(&text[s..e]) {
+                        return Some(found);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn parse_path_and_line(raw: &str, base: &Path) -> Option<(PathBuf, Option<usize>)> {
+    let trimmed = raw
+        .trim()
+        .trim_matches(|c| matches!(c, '(' | ')' | '[' | ']' | '<' | '>' | ',' | ';'))
+        .trim_end_matches(':');
+    if trimmed.is_empty() || trimmed.contains(['\n', '\r', '\t']) || trimmed.contains("://") {
+        return None;
+    }
+    let (mut path_part, mut line_num) = (trimmed, None);
+    // Strip up to two trailing `:number` segments (`path:line` or `path:line:col`),
+    // keeping Windows drive prefixes (`C:...`) intact.
+    if let Some((before_first, first_num)) = split_trailing_number(path_part) {
+        if let Some((before_second, second_num)) = split_trailing_number(before_first) {
+            path_part = before_second;
+            line_num = Some(second_num);
+        } else {
+            path_part = before_first;
+            line_num = Some(first_num);
+        }
+    }
+    let path_part = path_part.trim_matches(|c| matches!(c, '"' | '\''));
+    if path_part.is_empty() || path_part.contains('"') {
+        return None;
+    }
+    let candidate = PathBuf::from(path_part);
+    if (path_part.contains(':') && !candidate.is_absolute())
+        || crate::model::is_unc_or_device_path(&candidate)
+    {
+        return None;
+    }
+    let resolved = if candidate.is_absolute() {
+        candidate
+    } else {
+        base.join(candidate)
+    };
+    if crate::model::is_unc_or_device_path(&resolved) {
+        return None;
+    }
+    if let Some(ext) = resolved.extension().and_then(|e| e.to_str()) {
+        if matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "png"
+                | "jpg"
+                | "jpeg"
+                | "webp"
+                | "bmp"
+                | "exe"
+                | "dll"
+                | "pdb"
+                | "zip"
+                | "nupkg"
+                | "ttf"
+                | "ico"
+                | "obj"
+                | "lib"
+                | "rlib"
+                | "rmeta"
+        ) {
+            return None;
+        }
+    }
+    let meta = fs::metadata(&resolved).ok()?;
+    if !meta.is_file() || meta.len() > LIMIT as u64 {
+        return None;
+    }
+    Some((resolved, line_num))
+}
+
+fn split_trailing_number(input: &str) -> Option<(&str, usize)> {
+    let colon = input.rfind(':')?;
+    if colon <= 2 {
+        return None;
+    }
+    let number: usize = input[colon + 1..].parse().ok()?;
+    if number == 0 || number > 999_999 {
+        return None;
+    }
+    Some((&input[..colon], number))
 }
 
 impl Editor {
@@ -219,6 +411,43 @@ impl Editor {
     pub fn start_search(&mut self) {
         self.search = true;
         self.focus_search = true;
+    }
+    pub fn open_file(
+        &mut self,
+        path: PathBuf,
+        line: Option<usize>,
+        ctx: &egui::Context,
+    ) -> Result<(), String> {
+        let document = Document::open(path)?;
+        self.request(Pending::Replace(document, line), ctx);
+        self.activate();
+        Ok(())
+    }
+    pub fn open_selection(&mut self, selection: String, ctx: &egui::Context) -> Result<(), String> {
+        let text = selection.replace("\r\n", "\n").replace('\r', "\n");
+        if text.trim().is_empty() {
+            return Err("Bitte zuerst Text im Terminal markieren.".into());
+        }
+        if text.len() > LIMIT {
+            return Err("Die Auswahl ist größer als 256 KiB.".into());
+        }
+        if text
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
+        {
+            return Err("Die Auswahl enthält nicht unterstützte Steuerzeichen.".into());
+        }
+        let document = Document {
+            path: None,
+            text,
+            saved: String::new(),
+            disk: None,
+            crlf: false,
+            bom: false,
+        };
+        self.request(Pending::Replace(document, Some(1)), ctx);
+        self.activate();
+        Ok(())
     }
     fn request(&mut self, action: Pending, ctx: &egui::Context) {
         if self.document.dirty() {
@@ -237,11 +466,12 @@ impl Editor {
             });
         }
         match action {
-            Pending::Replace(document) => {
+            Pending::Replace(document, line) => {
                 self.document = document;
                 self.generation += 1;
                 self.query.clear();
                 self.next_match = 0;
+                self.jump_line = line;
                 self.message.clear();
                 self.activate();
             }
@@ -357,13 +587,13 @@ impl Editor {
             }
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Neu").clicked() {
-                    self.request(Pending::Replace(Document::default()), &ctx);
+                    self.request(Pending::Replace(Document::default(), None), &ctx);
                 }
                 if ui.button("Öffnen …").clicked() {
                     match choose_file(owner, base, false)
                         .and_then(|p| p.map(Document::open).transpose())
                     {
-                        Ok(Some(document)) => self.request(Pending::Replace(document), &ctx),
+                        Ok(Some(document)) => self.request(Pending::Replace(document, None), &ctx),
                         Ok(None) => {}
                         Err(error) => self.message = error,
                     }
@@ -410,7 +640,14 @@ impl Editor {
                     }
                 });
             }
-            let range = if jump && !self.query.is_empty() {
+            let range = if let Some(line) = self.jump_line.take() {
+                let total_lines = self.document.text.bytes().filter(|b| *b == b'\n').count() + 1;
+                let target = line.clamp(1, total_lines);
+                if line > 1 {
+                    self.message = format!("Zeile {target} / {total_lines}");
+                }
+                Some(line_char_range(&self.document.text, target))
+            } else if jump && !self.query.is_empty() {
                 let matches: Vec<_> = self
                     .document
                     .text
@@ -763,7 +1000,7 @@ mod tests {
         let mut editor = Editor::default();
         editor.activate();
         editor.document.text = "keep me".into();
-        editor.request(Pending::Replace(Document::default()), &ctx);
+        editor.request(Pending::Replace(Document::default(), None), &ctx);
         assert!(editor.blocked());
         assert_eq!(editor.document.text, "keep me");
         editor.pending = None; // Cancel leaves the document intact.
@@ -900,5 +1137,42 @@ mod tests {
         assert!(doc.dirty());
         assert_eq!(fs::read(fixture.path()).unwrap(), b"original");
         assert_eq!(fs::read_dir(&fixture.0).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn clicked_text_paths_and_stacktraces_resolve_with_line_numbers_and_selection_opens() {
+        let fixture = Fixture::new();
+        let file = fixture.path();
+        fs::write(&file, "Erste Zeile\nZweite Zeile ü\nDritte Zeile\n").unwrap();
+        let relative_line = "  --> Skript O'Brien ü.ps1:2:5: Fehler";
+        assert_eq!(
+            path_at(
+                relative_line,
+                relative_line.find("Brien").unwrap(),
+                &fixture.0
+            ),
+            Some((file.clone(), Some(2)))
+        );
+        let quoted = format!("\"{}\":3", file.display());
+        assert_eq!(
+            path_at(&quoted, quoted.find("Brien").unwrap(), &fixture.0),
+            Some((file.clone(), Some(3)))
+        );
+        assert!(path_at(r"\\198.51.100.1\share\a.txt:2", 4, &fixture.0).is_none());
+
+        let ctx = egui::Context::default();
+        let mut editor = Editor::default();
+        editor.open_file(file, Some(2), &ctx).unwrap();
+        assert!(editor.active);
+        assert_eq!(editor.jump_line, Some(2));
+        assert_eq!(&editor.document.text[12..27], "Zweite Zeile ü");
+        assert_eq!(line_char_range(&editor.document.text, 2), 12..26);
+
+        editor
+            .open_selection("Zeile 1\r\nZeile 2".into(), &ctx)
+            .unwrap();
+        assert!(editor.document.dirty());
+        assert!(editor.document.path.is_none());
+        assert_eq!(editor.document.text, "Zeile 1\nZeile 2");
     }
 }

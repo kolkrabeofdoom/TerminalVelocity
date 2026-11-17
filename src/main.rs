@@ -26,6 +26,7 @@ struct Session {
     backend: Option<TerminalBackend>,
     error: Option<String>,
     exited: bool,
+    notified: bool,
 }
 
 struct HistorySearch {
@@ -35,11 +36,42 @@ struct HistorySearch {
     error: Option<String>,
 }
 
+#[derive(Default)]
+struct CommandPalette {
+    query: String,
+    selected: usize,
+    focus_input: bool,
+}
+
+#[derive(Clone)]
+enum PaletteAction {
+    NewTab(Shell),
+    Split(Axis, Shell),
+    OpenRemote(remote::Connection, usize),
+    OpenProfile(usize, PathBuf),
+    SwitchTab(usize),
+    ActivateEditor,
+    ShowSearch,
+    ShowRemoteDialog,
+    ShowProfiles(bool),
+    SaveWorkspace,
+    ToggleSettings,
+    SetPreset(effects::Preset),
+}
+
+fn palette_matches_query(label: &str, query: &str) -> bool {
+    let lower = label.to_lowercase();
+    query
+        .split_whitespace()
+        .all(|word| lower.contains(&word.to_lowercase()))
+}
+
 fn handle_session_event(
     workspace: &mut Workspace,
     sessions: &mut HashMap<u64, Session>,
     generation: u64,
     event: PtyEvent,
+    active_pane: Option<u64>,
 ) {
     let Some((&pane_id, session)) = sessions
         .iter_mut()
@@ -52,6 +84,13 @@ fn handle_session_event(
     }
     if matches!(event, PtyEvent::Exit | PtyEvent::ChildExit(_)) {
         session.exited = true;
+    }
+    if matches!(
+        event,
+        PtyEvent::Bell | PtyEvent::Exit | PtyEvent::ChildExit(_)
+    ) && active_pane != Some(pane_id)
+    {
+        session.notified = true;
     }
 }
 
@@ -123,6 +162,7 @@ struct TerminalApp {
     remote_dialog: Option<remote::Dialog>,
     profiles_error: Option<String>,
     search: Option<HistorySearch>,
+    palette: Option<CommandPalette>,
     applied_acrylic: bool,
     applied_opacity: Option<Option<u8>>,
 }
@@ -201,6 +241,7 @@ impl TerminalApp {
             remote_dialog: None,
             profiles_error,
             search: None,
+            palette: None,
             applied_acrylic: false,
             applied_opacity: None,
         };
@@ -284,12 +325,14 @@ impl TerminalApp {
                 backend: Some(backend),
                 error: None,
                 exited: false,
+                notified: false,
             },
             Err(error) => Session {
                 generation,
                 backend: None,
                 error: Some(error),
                 exited: false,
+                notified: false,
             },
         };
         self.sessions.insert(pane.id, session);
@@ -366,13 +409,13 @@ impl TerminalApp {
         }
     }
 
-    fn new_pane(&mut self) -> Pane {
+    fn new_pane_with_shell(&mut self, shell: Shell) -> Pane {
         let id = self.next_id;
         self.next_id += 1;
         Pane {
             remote: None,
             id,
-            shell: self.workspace.default_shell,
+            shell,
             directory: self
                 .workspace
                 .inherited_directory(self.focused, std::path::Path::new(&self.directory)),
@@ -380,11 +423,15 @@ impl TerminalApp {
     }
 
     fn add_tab(&mut self, ctx: &egui::Context) {
+        self.add_tab_with_shell(ctx, self.workspace.default_shell);
+    }
+
+    fn add_tab_with_shell(&mut self, ctx: &egui::Context, shell: Shell) {
         if self.workspace.tabs.len() >= 32 || self.sessions.len() >= 64 {
             self.status = "Limit: 32 Tabs / 64 Bereiche".into();
             return;
         }
-        let pane = self.new_pane();
+        let pane = self.new_pane_with_shell(shell);
         self.editor.active = false;
         self.start(ctx, &pane);
         self.focused = pane.id;
@@ -396,6 +443,10 @@ impl TerminalApp {
     }
 
     fn split(&mut self, ctx: &egui::Context, axis: Axis) {
+        self.split_with_shell(ctx, axis, self.workspace.default_shell);
+    }
+
+    fn split_with_shell(&mut self, ctx: &egui::Context, axis: Axis, shell: Shell) {
         if self.editor.active {
             return;
         }
@@ -403,7 +454,7 @@ impl TerminalApp {
             self.status = "Maximal 64 Bereiche".into();
             return;
         }
-        let pane = self.new_pane();
+        let pane = self.new_pane_with_shell(shell);
         if let Some(tab) = self.workspace.tabs.get_mut(self.workspace.active_tab) {
             if tab.root.split(self.focused, axis, pane.clone()) {
                 self.start(ctx, &pane);
@@ -765,6 +816,248 @@ impl TerminalApp {
             self.focus_first();
         }
     }
+
+    fn show_palette(&mut self) {
+        self.close_search();
+        self.palette = Some(CommandPalette {
+            query: String::new(),
+            selected: 0,
+            focus_input: true,
+        });
+    }
+
+    fn palette_entries(&self) -> Vec<(String, PaletteAction)> {
+        let mut entries = Vec::new();
+        for shell in Shell::ALL {
+            entries.push((
+                format!("Neuer Tab: {}", shell.label()),
+                PaletteAction::NewTab(shell),
+            ));
+            if !self.editor.active {
+                entries.push((
+                    format!("Nebeneinander teilen: {}", shell.label()),
+                    PaletteAction::Split(Axis::Columns, shell),
+                ));
+                entries.push((
+                    format!("Untereinander teilen: {}", shell.label()),
+                    PaletteAction::Split(Axis::Rows, shell),
+                ));
+            }
+        }
+        let mut conn_indices: Vec<_> = (0..self.workspace.connections.len()).collect();
+        conn_indices.sort_by_key(|&i| !self.workspace.connections[i].favorite);
+        for index in conn_indices {
+            let c = &self.workspace.connections[index];
+            let star = if c.favorite { "★ " } else { "" };
+            entries.push((
+                format!("Verbinden (Neuer Tab): {star}{} · {}", c.name, c.label()),
+                PaletteAction::OpenRemote(c.clone(), 0),
+            ));
+            if !self.editor.active {
+                entries.push((
+                    format!(
+                        "Verbinden (Nebeneinander): {star}{} · {}",
+                        c.name,
+                        c.label()
+                    ),
+                    PaletteAction::OpenRemote(c.clone(), 1),
+                ));
+                entries.push((
+                    format!(
+                        "Verbinden (Untereinander): {star}{} · {}",
+                        c.name,
+                        c.label()
+                    ),
+                    PaletteAction::OpenRemote(c.clone(), 2),
+                ));
+            }
+        }
+        for (index, profile) in self.profiles.profiles.iter().enumerate() {
+            entries.push((
+                format!(
+                    "Projekt öffnen: {} ({})",
+                    profile.name,
+                    profile.directory.display()
+                ),
+                PaletteAction::OpenProfile(index, profile.directory.clone()),
+            ));
+        }
+        for (index, tab) in self.workspace.tabs.iter().enumerate() {
+            entries.push((
+                format!("Wechseln zu Tab {}: {}", index + 1, tab.name),
+                PaletteAction::SwitchTab(index),
+            ));
+        }
+        entries.extend([
+            ("Editor öffnen".into(), PaletteAction::ActivateEditor),
+            (
+                "Verlauf durchsuchen (Strg+F)".into(),
+                PaletteAction::ShowSearch,
+            ),
+            (
+                "Remote-Verbindungen verwalten …".into(),
+                PaletteAction::ShowRemoteDialog,
+            ),
+            (
+                "Projekt öffnen …".into(),
+                PaletteAction::ShowProfiles(false),
+            ),
+            (
+                "Projektprofil speichern …".into(),
+                PaletteAction::ShowProfiles(true),
+            ),
+            (
+                "Workspace speichern (Strg+Umschalt+S)".into(),
+                PaletteAction::SaveWorkspace,
+            ),
+            (
+                "Einstellungen öffnen / schließen".into(),
+                PaletteAction::ToggleSettings,
+            ),
+        ]);
+        for preset in [
+            effects::Preset::Off,
+            effects::Preset::Aurora,
+            effects::Preset::Phosphor,
+            effects::Preset::DeepSpace,
+        ] {
+            entries.push((
+                format!("Grafikeffekt-Preset: {}", preset.label()),
+                PaletteAction::SetPreset(preset),
+            ));
+        }
+        entries
+    }
+
+    fn execute_palette_action(&mut self, action: PaletteAction, ctx: &egui::Context) {
+        match action {
+            PaletteAction::NewTab(shell) => self.add_tab_with_shell(ctx, shell),
+            PaletteAction::Split(axis, shell) => self.split_with_shell(ctx, axis, shell),
+            PaletteAction::OpenRemote(connection, placement) => {
+                if let Err(error) = self.open_remote(connection, placement, ctx) {
+                    self.status = error;
+                }
+            }
+            PaletteAction::OpenProfile(index, directory) => {
+                if let Err(error) = self.open_profile(index, directory, ctx) {
+                    self.status = error;
+                }
+            }
+            PaletteAction::SwitchTab(index) => {
+                if index < self.workspace.tabs.len() {
+                    self.editor.active = false;
+                    self.workspace.active_tab = index;
+                    let mut panes = Vec::new();
+                    self.workspace.tabs[index].root.panes(&mut panes);
+                    for p in panes {
+                        if let Some(s) = self.sessions.get_mut(&p.id) {
+                            s.notified = false;
+                        }
+                    }
+                    self.focus_first();
+                }
+            }
+            PaletteAction::ActivateEditor => {
+                self.close_search();
+                self.editor.activate();
+            }
+            PaletteAction::ShowSearch => self.show_search(),
+            PaletteAction::ShowRemoteDialog => {
+                self.close_search();
+                self.remote_dialog = Some(remote::Dialog::default());
+            }
+            PaletteAction::ShowProfiles(saving) => self.show_profiles(saving),
+            PaletteAction::SaveWorkspace => {
+                self.save_workspace();
+            }
+            PaletteAction::ToggleSettings => {
+                self.settings = !self.settings;
+            }
+            PaletteAction::SetPreset(preset) => {
+                self.workspace.effects.preset = preset;
+                self.status = format!("Grafikeffekt-Preset: {}", preset.label());
+            }
+        }
+    }
+
+    fn palette_window(&mut self, ctx: &egui::Context) {
+        let Some(mut palette) = self.palette.take() else {
+            return;
+        };
+        let all = self.palette_entries();
+        let filtered: Vec<_> = all
+            .into_iter()
+            .filter(|(label, _)| palette_matches_query(label, &palette.query))
+            .collect();
+        if filtered.is_empty() {
+            palette.selected = 0;
+        } else {
+            palette.selected = palette.selected.min(filtered.len() - 1);
+        }
+        let close = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+        if close {
+            return;
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowDown)) && !filtered.is_empty()
+        {
+            palette.selected = (palette.selected + 1) % filtered.len();
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowUp)) && !filtered.is_empty() {
+            palette.selected = (palette.selected + filtered.len() - 1) % filtered.len();
+        }
+        let enter = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter));
+        let mut chosen = enter
+            .then(|| filtered.get(palette.selected).map(|(_, a)| a.clone()))
+            .flatten();
+        let mut open = true;
+        egui::Window::new("Befehlspalette · Strg+Umschalt+P")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(560.0)
+            .anchor(egui::Align2::CENTER_TOP, [0.0, 64.0])
+            .show(ctx, |ui| {
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut palette.query)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("Shell, KI, Verbindung, Profil oder Aktion suchen …"),
+                );
+                if palette.focus_input {
+                    response.request_focus();
+                    palette.focus_input = false;
+                }
+                if response.changed() {
+                    palette.selected = 0;
+                }
+                ui.small(
+                    "Pfeil hoch/runter: Auswahl · Enter oder Klick: Ausführen · Esc: Schließen",
+                );
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .max_height(280.0)
+                    .show(ui, |ui| {
+                        if filtered.is_empty() {
+                            ui.weak("Keine passende Aktion gefunden.");
+                        }
+                        for (index, (label, action)) in filtered.iter().enumerate() {
+                            let item = ui.selectable_label(index == palette.selected, label);
+                            if index == palette.selected {
+                                item.scroll_to_me(Some(egui::Align::Center));
+                            }
+                            if item.clicked() {
+                                chosen = Some(action.clone());
+                            }
+                        }
+                    });
+            });
+        if let Some(action) = chosen {
+            self.execute_palette_action(action, ctx);
+            return;
+        }
+        if open {
+            self.palette = Some(palette);
+        }
+    }
 }
 
 fn draw_node(
@@ -781,6 +1074,7 @@ fn draw_node(
     retry: &mut Option<u64>,
     ai_selection: &mut Option<ai::Draft>,
     image_request: &mut Option<inline_image::Request>,
+    editor_request: &mut Option<editor::Request>,
 ) {
     match node {
         Node::Split {
@@ -839,6 +1133,7 @@ fn draw_node(
                 retry,
                 ai_selection,
                 image_request,
+                editor_request,
             );
             draw_node(
                 ui,
@@ -854,6 +1149,7 @@ fn draw_node(
                 retry,
                 ai_selection,
                 image_request,
+                editor_request,
             );
         }
         Node::Pane(pane) => {
@@ -898,6 +1194,10 @@ fn draw_node(
                         pane.remote.as_ref().map(|r| r.label()).unwrap_or_else(|| pane.shell.label().into()),
                     );
                     ui.small(format!("#{}", pane.id));
+                    if sessions.get(&pane.id).is_some_and(|s| s.notified) {
+                        ui.colored_label(effects.visual().accent(), "●")
+                            .on_hover_text("Neues Signal oder beendete Sitzung in diesem Bereich");
+                    }
                     if ui.add_enabled(enabled, egui::Button::new(if pane.remote.is_some() { "Neu verbinden" } else { "Sitzung neu starten" }).small()).on_hover_text("Gleicher Anbieter und aktueller Projektordner; bisherige Ausgabe wird geleert").clicked() {
                         *retry = Some(pane.id);
                     }
@@ -952,14 +1252,69 @@ fn draw_node(
                                 }
                             }
                             let image_target_id = response.id.with("clicked-image-path");
+                            let editor_target_id = response.id.with("clicked-editor-path");
                             if response.secondary_clicked() {
-                                let path = if pane.remote.is_none() {
-                                    response.interact_pointer_pos().and_then(|pos| backend.text_at_pixel(pos.x - response.rect.min.x, pos.y - response.rect.min.y))
-                                        .and_then(|(text, offset)| inline_image::path_at(&text, offset, &pane.directory))
-                                } else { None };
-                                ui.ctx().data_mut(|data| data.insert_temp(image_target_id, path));
+                                let (image_path, editor_path) = if pane.remote.is_none() {
+                                    if let Some((text, offset)) = response
+                                        .interact_pointer_pos()
+                                        .and_then(|pos| {
+                                            backend.text_at_pixel(
+                                                pos.x - response.rect.min.x,
+                                                pos.y - response.rect.min.y,
+                                            )
+                                        })
+                                    {
+                                        (
+                                            inline_image::path_at(&text, offset, &pane.directory),
+                                            editor::path_at(&text, offset, &pane.directory),
+                                        )
+                                    } else {
+                                        (None, None)
+                                    }
+                                } else {
+                                    (None, None)
+                                };
+                                ui.ctx().data_mut(|data| {
+                                    data.insert_temp(image_target_id, image_path);
+                                    data.insert_temp(editor_target_id, editor_path);
+                                });
                             }
                             response.context_menu(|ui| {
+                                let editor_target = ui
+                                    .ctx()
+                                    .data(|data| {
+                                        data.get_temp::<Option<(PathBuf, Option<usize>)>>(
+                                            editor_target_id,
+                                        )
+                                    })
+                                    .flatten();
+                                let editor_label = match editor_target.as_ref().and_then(|(_, line)| *line) {
+                                    Some(line) => format!("Datei im Editor öffnen (Zeile {line})"),
+                                    None => "Datei im Editor öffnen".into(),
+                                };
+                                if ui
+                                    .add_enabled(
+                                        editor_target.is_some(),
+                                        egui::Button::new(editor_label),
+                                    )
+                                    .on_hover_text(
+                                        editor_target
+                                            .as_ref()
+                                            .map(|(p, line)| match line {
+                                                Some(l) => format!("{}:{l}", p.display()),
+                                                None => p.display().to_string(),
+                                            })
+                                            .unwrap_or_else(|| {
+                                                "Rechtsklick auf einen lokalen Dateipfad (optional mit :Zeile).".into()
+                                            }),
+                                    )
+                                    .clicked()
+                                {
+                                    *editor_request = editor_target.map(|(path, line)| {
+                                        editor::Request::OpenFile(path, line)
+                                    });
+                                    ui.close_menu();
+                                }
                                 let path = ui.ctx().data(|data| data.get_temp::<Option<PathBuf>>(image_target_id)).flatten();
                                 if ui.add_enabled(path.is_some(), egui::Button::new("Bild öffnen"))
                                     .on_hover_text(path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "Rechtsklick auf einen lokalen Bilddateipfad. Remote-Pfade werden nicht lokal geöffnet.".into())).clicked() {
@@ -974,6 +1329,10 @@ fn draw_node(
                                 let text = backend.selectable_content();
                                 let selected = !text.trim().is_empty();
                                 if ui.add_enabled(selected, egui::Button::new("Kopieren")).clicked() { ui.ctx().copy_text(text.clone()); ui.close_menu(); }
+                                if ui.add_enabled(selected, egui::Button::new("Auswahl im Editor öffnen")).clicked() {
+                                    *editor_request = Some(editor::Request::OpenSelection(text.clone()));
+                                    ui.close_menu();
+                                }
                                 if ui.add_enabled(selected, egui::Button::new("An KI übergeben …")).clicked() {
                                     *ai_selection = Some(ai::Draft::new(text.clone(), pane.directory.clone(), pane.shell));
                                     ui.close_menu();
@@ -1023,8 +1382,20 @@ impl eframe::App for TerminalApp {
                 _ => None,
             })
             .unwrap_or(std::ptr::null_mut());
+        let active_pane = (!self.editor.active).then_some(self.focused);
         while let Ok((id, event)) = self.receiver.try_recv() {
-            handle_session_event(&mut self.workspace, &mut self.sessions, id, event);
+            handle_session_event(
+                &mut self.workspace,
+                &mut self.sessions,
+                id,
+                event,
+                active_pane,
+            );
+        }
+        if let Some(id) = active_pane {
+            if let Some(session) = self.sessions.get_mut(&id) {
+                session.notified = false;
+            }
         }
         for session in self.sessions.values_mut() {
             if let Some(backend) = &mut session.backend {
@@ -1040,9 +1411,25 @@ impl eframe::App for TerminalApp {
             shift: true,
             ..Modifiers::NONE
         };
+        if !self.editor.blocked()
+            && !self.settings
+            && self.profile_dialog.is_none()
+            && self.remote_dialog.is_none()
+            && self.ai_draft.is_none()
+            && self.close_target.is_none()
+            && self.restart_target.is_none()
+            && ctx.input_mut(|i| i.consume_key(shortcuts, Key::P))
+        {
+            if self.palette.is_some() {
+                self.palette = None;
+            } else {
+                self.show_palette();
+            }
+        }
         if !self.editor.active
             && !self.editor.blocked()
             && !self.settings
+            && self.palette.is_none()
             && self.profile_dialog.is_none()
             && self.remote_dialog.is_none()
             && self.ai_draft.is_none()
@@ -1055,6 +1442,7 @@ impl eframe::App for TerminalApp {
         if !self.editor.active
             && !self.editor.blocked()
             && !self.settings
+            && self.palette.is_none()
             && self.close_target.is_none()
             && self.restart_target.is_none()
             && self.ai_draft.is_none()
@@ -1104,12 +1492,26 @@ impl eframe::App for TerminalApp {
                 if self.editor.blocked()
                     || self.profile_dialog.is_some()
                     || self.remote_dialog.is_some()
+                    || self.palette.is_some()
                 {
                     ui.disable();
                 }
                 ui.add_space(5.0);
                 ui.horizontal_wrapped(|ui| {
                     ui.strong("TERMINALVELOCITY");
+                    if ui
+                        .add_enabled(
+                            !self.settings
+                                && self.ai_draft.is_none()
+                                && self.close_target.is_none()
+                                && self.restart_target.is_none(),
+                            egui::Button::new("Befehle …"),
+                        )
+                        .on_hover_text("Befehlspalette · Strg+Umschalt+P")
+                        .clicked()
+                    {
+                        self.show_palette();
+                    }
                     if ui.button("Editor").clicked() {
                         self.close_search();
                         self.editor.activate();
@@ -1216,10 +1618,21 @@ impl eframe::App for TerminalApp {
                 ui.horizontal_wrapped(|ui| {
                     let mut selected = None;
                     for (index, tab) in self.workspace.tabs.iter().enumerate() {
+                        let mut panes = Vec::new();
+                        tab.root.panes(&mut panes);
+                        let notified = panes
+                            .iter()
+                            .any(|p| self.sessions.get(&p.id).is_some_and(|s| s.notified));
+                        let label = if notified {
+                            egui::RichText::new(format!("{}  {} ●", index + 1, tab.name))
+                                .color(self.workspace.effects.visual().accent())
+                        } else {
+                            egui::RichText::new(format!("{}  {}", index + 1, tab.name))
+                        };
                         if ui
                             .selectable_label(
                                 !self.editor.active && index == self.workspace.active_tab,
-                                format!("{}  {}", index + 1, tab.name),
+                                label,
                             )
                             .clicked()
                         {
@@ -1237,6 +1650,15 @@ impl eframe::App for TerminalApp {
                     if let Some(index) = selected {
                         self.editor.active = false;
                         self.workspace.active_tab = index;
+                        if let Some(tab) = self.workspace.tabs.get(index) {
+                            let mut panes = Vec::new();
+                            tab.root.panes(&mut panes);
+                            for p in panes {
+                                if let Some(s) = self.sessions.get_mut(&p.id) {
+                                    s.notified = false;
+                                }
+                            }
+                        }
                         self.focus_first();
                     }
                 });
@@ -1254,11 +1676,13 @@ impl eframe::App for TerminalApp {
         self.search_bar(ctx, background);
         let mut ai_selection = None;
         let mut image_request = None;
+        let mut editor_request = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(background).inner_margin(8.0))
             .show(ctx, |ui| {
                 if self.editor.active {
                     let enabled = !self.settings
+                        && self.palette.is_none()
                         && self.ai_draft.is_none()
                         && self.profile_dialog.is_none()
                         && self.remote_dialog.is_none()
@@ -1270,6 +1694,7 @@ impl eframe::App for TerminalApp {
                 let rect = ui.available_rect_before_wrap();
                 if let Some(tab) = self.workspace.tabs.get_mut(self.workspace.active_tab) {
                     let enabled = !self.settings
+                        && self.palette.is_none()
                         && self.close_target.is_none()
                         && self.restart_target.is_none()
                         && self.ai_draft.is_none()
@@ -1291,9 +1716,32 @@ impl eframe::App for TerminalApp {
                         &mut retry_target,
                         &mut ai_selection,
                         &mut image_request,
+                        &mut editor_request,
                     );
                 }
             });
+        if let Some(request) = editor_request {
+            self.close_search();
+            let result = match request {
+                editor::Request::OpenFile(path, line) => {
+                    let display = match line {
+                        Some(l) => format!("{} (Zeile {l})", path.display()),
+                        None => path.display().to_string(),
+                    };
+                    self.editor
+                        .open_file(path, line, ctx)
+                        .map(|()| format!("Im Editor geöffnet: {display}"))
+                }
+                editor::Request::OpenSelection(text) => self
+                    .editor
+                    .open_selection(text, ctx)
+                    .map(|()| "Auswahl als neues Dokument im Editor geöffnet".into()),
+            };
+            self.status = match result {
+                Ok(msg) => msg,
+                Err(error) => error,
+            };
+        }
         if let Some(request) = image_request {
             let (id, path) = match request {
                 inline_image::Request::Open(id, path) => (id, Ok(Some(path))),
@@ -1369,6 +1817,7 @@ impl eframe::App for TerminalApp {
             self.ai_draft = Some(draft);
         }
         self.editor.confirmation(ctx, dialog_owner, &editor_base);
+        self.palette_window(ctx);
         self.profile_window(ctx);
         self.remote_window(ctx);
         let mut submit = false;
@@ -1460,6 +1909,7 @@ impl eframe::App for TerminalApp {
                 apply_paths = ui.button("Speichern und fehlgeschlagene Sitzungen neu starten").clicked();
                 ui.small("Laufende Sitzungen bleiben aktiv. Geänderte Pfade gelten für neue Sitzungen.");
                 ui.separator();
+                ui.label("Strg+Umschalt+P: Befehlspalette");
                 ui.label("Strg+Tab: Nächster Bereich");
                 ui.label("Strg+Umschalt+Rechts: Nächster Tab");
                 ui.label("Strg+Umschalt+C / V: Kopieren / Einfügen");
@@ -1786,7 +2236,13 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
         let deadline = Instant::now() + Duration::from_secs(20);
         while Instant::now() < deadline {
             while let Ok((generation, event)) = app.receiver.try_recv() {
-                handle_session_event(&mut app.workspace, &mut app.sessions, generation, event);
+                handle_session_event(
+                    &mut app.workspace,
+                    &mut app.sessions,
+                    generation,
+                    event,
+                    Some(app.focused),
+                );
             }
             if predicate(app) {
                 return Ok(());
@@ -1806,7 +2262,13 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
             while let Ok((generation, event)) = app.receiver.try_recv() {
-                handle_session_event(&mut app.workspace, &mut app.sessions, generation, event);
+                handle_session_event(
+                    &mut app.workspace,
+                    &mut app.sessions,
+                    generation,
+                    event,
+                    Some(app.focused),
+                );
             }
             std::thread::sleep(Duration::from_millis(30));
         }
@@ -1870,6 +2332,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             remote_dialog: None,
             profiles_error: None,
             search: None,
+            palette: None,
             applied_acrylic: false,
             applied_opacity: None,
         };
@@ -1910,12 +2373,14 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             &mut app.sessions,
             old_generation,
             PtyEvent::Exit,
+            Some(app.focused),
         );
         handle_session_event(
             &mut app.workspace,
             &mut app.sessions,
             old_generation,
             PtyEvent::Title(format!("TERMINALVELOCITY_CWD:{}", base.display())),
+            Some(app.focused),
         );
         if app.sessions[&1].exited
             || app
@@ -2206,6 +2671,7 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
             remote_dialog: None,
             profiles_error: None,
             search: None,
+            palette: None,
             applied_acrylic: false,
             applied_opacity: None,
         };
@@ -2483,4 +2949,57 @@ fn main() -> eframe::Result {
         },
         Box::new(|cc| Ok(Box::new(TerminalApp::new(cc)))),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn command_palette_filter_and_background_tab_notifications() {
+        assert!(palette_matches_query(
+            "Neuer Tab: Antigravity CLI",
+            "antigravity tab"
+        ));
+        assert!(palette_matches_query(
+            "Verbinden (Nebeneinander): ★ Prod · SSH · root@server",
+            "prod ssh"
+        ));
+        assert!(!palette_matches_query(
+            "Neuer Tab: PowerShell",
+            "antigravity"
+        ));
+
+        let mut workspace = Workspace::default();
+        let mut sessions = HashMap::new();
+        sessions.insert(
+            1,
+            Session {
+                generation: 10,
+                backend: None,
+                error: None,
+                exited: false,
+                notified: false,
+            },
+        );
+        sessions.insert(
+            2,
+            Session {
+                generation: 20,
+                backend: None,
+                error: None,
+                exited: false,
+                notified: false,
+            },
+        );
+        // Active pane (1) does not set notification badge on bell.
+        handle_session_event(&mut workspace, &mut sessions, 10, PtyEvent::Bell, Some(1));
+        assert!(!sessions[&1].notified);
+        // Inactive pane (2) sets notification badge on bell and exit.
+        handle_session_event(&mut workspace, &mut sessions, 20, PtyEvent::Bell, Some(1));
+        assert!(sessions[&2].notified);
+        sessions.get_mut(&2).unwrap().notified = false;
+        handle_session_event(&mut workspace, &mut sessions, 20, PtyEvent::Exit, Some(1));
+        assert!(sessions[&2].notified);
+        assert!(sessions[&2].exited);
+    }
 }
