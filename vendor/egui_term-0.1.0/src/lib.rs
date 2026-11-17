@@ -7,7 +7,8 @@ mod view;
 
 pub use backend::settings::BackendSettings;
 pub use backend::{
-    is_safe_http_url, BackendCommand, PtyEvent, SelectionType, TerminalBackend, TerminalMode,
+    encode_paste, is_safe_http_url, BackendCommand, PtyEvent, SelectionType, TerminalBackend,
+    TerminalMode,
 };
 pub use bindings::{Binding, BindingAction, InputKind, KeyboardBinding};
 pub use font::{FontSettings, TerminalFont};

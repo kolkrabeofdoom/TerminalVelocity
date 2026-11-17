@@ -18,9 +18,19 @@ pub struct Document {
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>, String> {
+    if crate::model::is_unc_or_device_path(path) {
+        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
+    }
     let file = fs::File::open(path).map_err(|e| e.to_string())?;
     if !file.metadata().map_err(|e| e.to_string())?.is_file() {
         return Err("Bitte eine normale Textdatei wählen.".into());
+    }
+    if path
+        .canonicalize()
+        .map(|c| crate::model::is_unc_or_device_path(&c))
+        .unwrap_or(true)
+    {
+        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
     }
     let mut bytes = Vec::new();
     file.take((LIMIT + 1) as u64)
@@ -102,6 +112,9 @@ impl Document {
 fn atomic_save(path: &Path, bytes: &[u8], expected: Option<&[u8]>) -> Result<(), String> {
     use std::os::windows::{ffi::OsStrExt, fs::OpenOptionsExt};
     use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, ReplaceFileW};
+    if crate::model::is_unc_or_device_path(path) {
+        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
+    }
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let parent = path.parent().ok_or("Kein Zielordner")?;
     let temp = parent.join(format!(
@@ -379,7 +392,13 @@ fn parse_path_and_line(raw: &str, base: &Path) -> Option<(PathBuf, Option<usize>
         }
     }
     let meta = fs::metadata(&resolved).ok()?;
-    if !meta.is_file() || meta.len() > LIMIT as u64 {
+    if !meta.is_file()
+        || meta.len() > LIMIT as u64
+        || resolved
+            .canonicalize()
+            .map(|c| crate::model::is_unc_or_device_path(&c))
+            .unwrap_or(true)
+    {
         return None;
     }
     Some((resolved, line_num))

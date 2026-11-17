@@ -119,7 +119,11 @@ impl Shell {
     pub fn resolve(self, custom: Option<&str>, app_dir: &std::path::Path) -> Option<PathBuf> {
         if let Some(value) = custom.filter(|value| !value.trim().is_empty()) {
             let raw = value.trim().trim_matches('"');
-            if raw.len() > 4096 || raw.chars().any(char::is_control) {
+            if raw.is_empty()
+                || raw.len() > 4096
+                || raw.contains('"')
+                || raw.chars().any(char::is_control)
+            {
                 return None;
             }
             let path = PathBuf::from(raw);
@@ -131,7 +135,13 @@ impl Shell {
             } else {
                 app_dir.join(path)
             };
-            return (!is_unc_or_device_path(&path) && path.is_file()).then_some(path);
+            return (!is_unc_or_device_path(&path)
+                && path.is_file()
+                && path
+                    .canonicalize()
+                    .map(|c| !is_unc_or_device_path(&c))
+                    .unwrap_or(false))
+            .then_some(path);
         }
         if let Some(path) = self.bundled(app_dir) {
             return Some(path);
@@ -502,6 +512,7 @@ impl Workspace {
         for value in std::iter::once(&self.ssh_path).chain(self.shell_paths.iter()) {
             let trimmed = value.trim().trim_matches('"');
             if value.len() > 4096
+                || trimmed.contains('"')
                 || value.chars().any(char::is_control)
                 || (!trimmed.is_empty() && is_unc_or_device_path(Path::new(trimmed)))
             {
@@ -558,6 +569,12 @@ impl Workspace {
             Ok(())
         }
         for tab in &mut self.tabs {
+            if tab.name.trim().is_empty()
+                || tab.name.chars().count() > 120
+                || tab.name.chars().any(char::is_control)
+            {
+                return Err("Ungültiger Tab-Name".into());
+            }
             walk(&mut tab.root, 0, &mut ids)?;
         }
         self.active_tab = self.active_tab.min(self.tabs.len().saturating_sub(1));
@@ -572,6 +589,26 @@ impl Workspace {
             16.0
         };
         Ok(())
+    }
+    pub fn load(path: &Path) -> Result<Self, String> {
+        use std::io::Read;
+        if is_unc_or_device_path(path) {
+            return Err("Ungültiger Workspace-Pfad.".into());
+        }
+        let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+        if !file.metadata().map_err(|e| e.to_string())?.is_file() {
+            return Err("Workspace-Pfad ist keine reguläre Datei.".into());
+        }
+        let mut bytes = Vec::new();
+        file.take(2_000_001)
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        if bytes.len() > 2_000_000 {
+            return Err("Workspace-Datei ist zu groß.".into());
+        }
+        let mut state: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        state.validate()?;
+        Ok(state)
     }
     pub fn panes(&self) -> Vec<Pane> {
         let mut result = vec![];
@@ -772,6 +809,32 @@ mod tests {
         ] {
             assert!(!egui_term::is_safe_http_url(unsafe_url), "{unsafe_url}");
         }
+
+        // TV-07: Bracketed paste neutralizes ESC/CSI/NUL and wraps in 200~/201~.
+        assert_eq!(
+            egui_term::encode_paste("echo ok\x1b[201~\nrm -rf\0", true),
+            b"\x1b[200~echo ok[201~\nrm -rf\x1b[201~"
+        );
+        assert_eq!(egui_term::encode_paste("plain", false), b"plain");
+
+        // TV-08 & TV-11: Reject internal quotes in executable paths and invalid tab names.
+        assert_eq!(
+            Shell::PowerShell.resolve(Some(r#""C:\path"\bad.exe""#), &base),
+            None
+        );
+        let mut bad_quote = Workspace {
+            ssh_path: r#"C:\bad"quote\ssh.exe"#.into(),
+            ..Workspace::default()
+        };
+        assert!(bad_quote.validate().is_err());
+        let mut bad_tab_name = Workspace {
+            tabs: vec![Tab {
+                name: "bad\x1bname".into(),
+                root: Node::Pane(pane(1)),
+            }],
+            ..Workspace::default()
+        };
+        assert!(bad_tab_name.validate().is_err());
     }
     fn pane(id: u64) -> Pane {
         Pane {

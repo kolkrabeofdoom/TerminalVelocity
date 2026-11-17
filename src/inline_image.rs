@@ -56,7 +56,12 @@ pub fn path_at(text: &str, offset: usize, base: &std::path::Path) -> Option<Path
                 if checked > 64 {
                     return fallback;
                 }
-                if path.is_file() {
+                if path.is_file()
+                    && path
+                        .canonicalize()
+                        .map(|c| !crate::model::is_unc_or_device_path(&c))
+                        .unwrap_or(false)
+                {
                     return Some(path);
                 }
                 if fallback.is_none() && !candidate.contains(char::is_whitespace) {

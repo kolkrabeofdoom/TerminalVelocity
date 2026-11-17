@@ -161,6 +161,25 @@ pub fn is_safe_http_url(url: &str) -> bool {
         .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/') && !rest.starts_with('\\'))
 }
 
+/// Encode clipboard text for the PTY, honoring `TermMode::BRACKETED_PASTE` (`\x1b[?2004h`)
+/// and stripping ESC/CSI/NUL control characters when bracketed so pasted content cannot
+/// prematurely terminate `\x1b[201~` or inject escape sequences.
+pub fn encode_paste(text: &str, bracketed: bool) -> Vec<u8> {
+    if bracketed {
+        let sanitized: String = text
+            .chars()
+            .filter(|&c| c != '\x1b' && c != '\u{009b}' && c != '\0')
+            .collect();
+        let mut out = Vec::with_capacity(sanitized.len() + 12);
+        out.extend_from_slice(b"\x1b[200~");
+        out.extend_from_slice(sanitized.as_bytes());
+        out.extend_from_slice(b"\x1b[201~");
+        out
+    } else {
+        text.as_bytes().to_vec()
+    }
+}
+
 fn literal_pattern(query: &str) -> String {
     // Explicit case sensitivity avoids RegexSearch's automatic smart-case behavior.
     let mut pattern = String::from("(?-i)");
@@ -178,6 +197,12 @@ impl TerminalBackend {
         pty_event_proxy_sender: Sender<(u64, PtyEvent)>,
         settings: BackendSettings,
     ) -> Result<Self> {
+        if settings.shell.trim().is_empty() || settings.shell.contains(['"', '\0', '\r', '\n']) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Ungültiger Programmpfad",
+            ));
+        }
         #[cfg(windows)]
         let program = format!("\"{}\"", settings.shell);
         #[cfg(not(windows))]

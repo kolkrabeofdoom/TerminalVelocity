@@ -185,15 +185,9 @@ impl TerminalApp {
         let storage = std::env::current_exe()
             .unwrap_or_default()
             .with_file_name("workspace.json");
-        let (workspace, load_status) = match std::fs::read(&storage) {
-            Ok(bytes) => match serde_json::from_slice::<Workspace>(&bytes) {
-                Ok(mut state) => match state.validate() {
-                    Ok(()) => (state, "Arbeitsbereich wiederhergestellt".to_string()),
-                    Err(error) => (
-                        Workspace::default(),
-                        format!("Workspace nicht geladen: {error}"),
-                    ),
-                },
+        let (workspace, load_status) = match std::fs::metadata(&storage) {
+            Ok(_) => match Workspace::load(&storage) {
+                Ok(state) => (state, "Arbeitsbereich wiederhergestellt".to_string()),
                 Err(error) => (
                     Workspace::default(),
                     format!("Workspace nicht geladen: {error}"),

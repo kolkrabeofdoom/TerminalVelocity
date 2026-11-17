@@ -25,9 +25,11 @@ impl Default for Settings {
 }
 impl Settings {
     pub fn validate(&mut self) {
+        let trimmed = self.path.trim().trim_matches('"');
         if self.path.len() > 4096
+            || trimmed.contains('"')
             || self.path.chars().any(char::is_control)
-            || crate::model::is_unc_or_device_path(Path::new(&self.path))
+            || crate::model::is_unc_or_device_path(Path::new(trimmed))
         {
             self.enabled = false;
             self.path.clear();
@@ -185,6 +187,13 @@ pub(crate) fn load_rgba(path: &Path) -> Result<image::RgbaImage, String> {
         return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
     }
     let file = std::fs::File::open(path).map_err(|e| format!("Bild nicht geöffnet: {e}"))?;
+    if path
+        .canonicalize()
+        .map(|c| crate::model::is_unc_or_device_path(&c))
+        .unwrap_or(true)
+    {
+        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
+    }
     let mut bytes = Vec::new();
     file.take(32 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)

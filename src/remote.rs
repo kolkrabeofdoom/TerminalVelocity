@@ -68,7 +68,8 @@ impl Connection {
             return Err("Der Port muss zwischen 1 und 65535 liegen.".into());
         }
         if !self.key_file.is_empty()
-            && !crate::model::is_local_absolute_path(Path::new(&self.key_file))
+            && (self.key_file.contains('"')
+                || !crate::model::is_local_absolute_path(Path::new(&self.key_file)))
         {
             return Err("Bitte einen absoluten Pfad zur Schlüsseldatei angeben.".into());
         }
@@ -161,7 +162,11 @@ impl Connection {
 pub fn ssh_executable(custom: &str, base: &Path) -> Option<PathBuf> {
     if !custom.trim().is_empty() {
         let raw = custom.trim().trim_matches('"');
-        if raw.len() > 4096 || raw.chars().any(char::is_control) {
+        if raw.is_empty()
+            || raw.len() > 4096
+            || raw.contains('"')
+            || raw.chars().any(char::is_control)
+        {
             return None;
         }
         let path = PathBuf::from(raw);
@@ -173,7 +178,13 @@ pub fn ssh_executable(custom: &str, base: &Path) -> Option<PathBuf> {
         } else {
             base.join(path)
         };
-        return (!crate::model::is_unc_or_device_path(&path) && path.is_file()).then_some(path);
+        return (!crate::model::is_unc_or_device_path(&path)
+            && path.is_file()
+            && path
+                .canonicalize()
+                .map(|c| !crate::model::is_unc_or_device_path(&c))
+                .unwrap_or(false))
+        .then_some(path);
     }
     if let Some(root) = std::env::var_os("SystemRoot") {
         let path = PathBuf::from(root).join("System32/OpenSSH/ssh.exe");
