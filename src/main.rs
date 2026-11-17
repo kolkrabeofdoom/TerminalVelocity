@@ -56,6 +56,8 @@ enum PaletteAction {
     ShowProfiles(bool),
     SaveWorkspace,
     ToggleSettings,
+    ToggleHelp,
+    ToggleAbout,
     SetPreset(effects::Preset),
 }
 
@@ -151,6 +153,8 @@ struct TerminalApp {
     next_id: u64,
     next_session_id: u64,
     settings: bool,
+    help: bool,
+    about: bool,
     directory: String,
     status: String,
     storage: PathBuf,
@@ -224,6 +228,8 @@ impl TerminalApp {
             next_id,
             next_session_id: 1,
             settings: false,
+            help: false,
+            about: false,
             directory,
             status: load_status,
             storage,
@@ -268,6 +274,8 @@ impl TerminalApp {
     fn has_modal_dialog(&self) -> bool {
         self.editor.blocked()
             || self.settings
+            || self.help
+            || self.about
             || self.profile_dialog.is_some()
             || self.remote_dialog.is_some()
             || self.ai_draft.is_some()
@@ -936,6 +944,14 @@ impl TerminalApp {
                 "Einstellungen öffnen / schließen".into(),
                 PaletteAction::ToggleSettings,
             ),
+            (
+                "Hilfe & Tastenkürzel (F1)".into(),
+                PaletteAction::ToggleHelp,
+            ),
+            (
+                "Über TerminalVelocity & Release Notes".into(),
+                PaletteAction::ToggleAbout,
+            ),
         ]);
         for preset in [
             effects::Preset::Off,
@@ -988,6 +1004,12 @@ impl TerminalApp {
             }
             PaletteAction::ToggleSettings => {
                 self.settings = !self.settings;
+            }
+            PaletteAction::ToggleHelp => {
+                self.help = !self.help;
+            }
+            PaletteAction::ToggleAbout => {
+                self.about = !self.about;
             }
             PaletteAction::SetPreset(preset) => {
                 self.workspace.effects.preset = preset;
@@ -1073,6 +1095,117 @@ impl TerminalApp {
         if open {
             self.palette = Some(palette);
         }
+    }
+
+    fn help_window(&mut self, ctx: &egui::Context) {
+        if !self.help {
+            return;
+        }
+        let mut open = self.help;
+        egui::Window::new("Hilfe · TerminalVelocity")
+            .open(&mut open)
+            .default_width(640.0)
+            .max_height(520.0)
+            .vscroll(true)
+            .show(ctx, |ui| {
+                ui.heading("Tastenkürzel");
+                ui.add_space(4.0);
+                egui::Grid::new("help-shortcuts")
+                    .striped(true)
+                    .spacing([16.0, 4.0])
+                    .show(ui, |ui| {
+                        for (shortcut, desc) in [
+                            ("F1", "Diese Hilfe öffnen / schließen"),
+                            ("Strg+Umschalt+P", "Befehlspalette öffnen"),
+                            ("Strg+Umschalt+T", "Neuen Tab öffnen"),
+                            ("Strg+Umschalt+D / E", "Bereich nebeneinander / untereinander teilen"),
+                            ("Strg+Tab / Strg+Umschalt+Rechts", "Nächster Bereich / nächster Tab"),
+                            ("Strg+Umschalt+W", "Aktiven Bereich schließen"),
+                            ("Strg+Umschalt+S", "Workspace speichern (im Editor: Speichern unter)"),
+                            ("Strg+Umschalt+C / V", "Auswahl kopieren / sicher einfügen (Bracketed Paste)"),
+                            ("Strg+F", "Terminalverlauf bzw. Dokument durchsuchen"),
+                            ("Strg+Klick", "Erkannten HTTP(S)-Link im Browser öffnen"),
+                        ] {
+                            ui.monospace(shortcut);
+                            ui.label(desc);
+                            ui.end_row();
+                        }
+                    });
+                ui.separator();
+                ui.heading("Bedienung & Funktionen");
+                ui.add_space(4.0);
+                for (title, body) in [
+                    (
+                        "Dateipfade, Stacktraces & Auswahl im Editor",
+                        "Rechtsklick auf einen lokalen Dateipfad oder eine Compiler-/Fehlermeldung (z. B. src\\main.rs:142:5) → „Datei im Editor öffnen (Zeile X)“. Markierter Text lässt sich per Rechtsklick als ungespeichertes Dokument in den Editor übernehmen.",
+                    ),
+                    (
+                        "KI-Übergabe & Shells",
+                        "PowerShell 7, CMD, Git Bash sowie Codex, Claude, Antigravity (agy.exe) und OpenAI CLI lassen sich oben oder über die Befehlspalette starten. Markierter Text kann über das Kontextmenü geprüft an eine neue KI-Sitzung übergeben werden.",
+                    ),
+                    (
+                        "Remote & Projektprofile",
+                        "Unter „Verbinden …“ lassen sich SSH- und PowerShell-WinRM-Ziele speichern. „Projekt speichern …“ sichert komplette Tab- und Split-Layouts inkl. relativer Unterordner als Vorlage.",
+                    ),
+                    (
+                        "Bilder & Benachrichtigungen",
+                        "PNG, JPEG, WebP und BMP lassen sich per Drag-and-drop, Dateiauswahl oder Rechtsklick sowie über Sixel direkt im Terminal anzeigen. Ein farbiger Punkt (●) an Tabs/Bereichen meldet Glockensignale oder beendete Hintergrundsitzungen.",
+                    ),
+                ] {
+                    ui.strong(title);
+                    ui.label(body);
+                    ui.add_space(4.0);
+                }
+            });
+        self.help = open;
+    }
+
+    fn about_window(&mut self, ctx: &egui::Context) {
+        if !self.about {
+            return;
+        }
+        let mut open = self.about;
+        egui::Window::new("Über TerminalVelocity")
+            .open(&mut open)
+            .default_width(640.0)
+            .max_height(540.0)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading("TerminalVelocity");
+                    ui.label(
+                        egui::RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                            .strong()
+                            .color(Color32::from_rgb(100, 210, 190)),
+                    );
+                });
+                ui.label("Portables Windows-Terminal mit Split-Bereichen, KI-CLI-Integration, SSH/WinRM, integriertem UTF-8-Editor und Sixel-/Bildanzeige.");
+                ui.small("MIT-Lizenz · Rust + egui/eframe + ConPTY");
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("GitHub-Repository:");
+                    ui.hyperlink_to(
+                        "https://github.com/kolkrabeofdoom/TerminalVelocity",
+                        "https://github.com/kolkrabeofdoom/TerminalVelocity",
+                    );
+                    ui.separator();
+                    ui.hyperlink_to(
+                        "Releases & Downloads",
+                        "https://github.com/kolkrabeofdoom/TerminalVelocity/releases",
+                    );
+                });
+                ui.separator();
+                ui.strong("Aktuelle Release Notes");
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical()
+                    .max_height(340.0)
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(include_str!("../RELEASE_NOTES.md"))
+                                .size(13.0),
+                        );
+                    });
+            });
+        self.about = open;
     }
 }
 
@@ -1490,6 +1623,12 @@ impl eframe::App for TerminalApp {
                 self.show_palette();
             }
         }
+        if !self.editor.blocked()
+            && self.palette.is_none()
+            && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F1))
+        {
+            self.help = !self.help;
+        }
         if !self.editor.active
             && !self.has_modal_dialog()
             && self.palette.is_none()
@@ -1632,6 +1771,20 @@ impl eframe::App for TerminalApp {
                         .clicked()
                     {
                         self.show_profiles(true);
+                    }
+                    if ui
+                        .button("Hilfe")
+                        .on_hover_text("Bedienung & Tastenkürzel · F1")
+                        .clicked()
+                    {
+                        self.help = !self.help;
+                    }
+                    if ui
+                        .button("Über")
+                        .on_hover_text("GitHub-Repository, Version & Release Notes")
+                        .clicked()
+                    {
+                        self.about = !self.about;
                     }
                 });
                 ui.horizontal_wrapped(|ui| {
@@ -1817,6 +1970,8 @@ impl eframe::App for TerminalApp {
         self.palette_window(ctx);
         self.profile_window(ctx);
         self.remote_window(ctx);
+        self.help_window(ctx);
+        self.about_window(ctx);
         let mut submit = false;
         let mut cancel = false;
         let mut open = true;
@@ -2320,6 +2475,8 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             next_id: 3,
             next_session_id: 1,
             settings: false,
+            help: false,
+            about: false,
             directory: base.display().to_string(),
             status: String::new(),
             storage: base.join("unused-restart-test.json"),
@@ -2656,6 +2813,8 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
             next_id: 3,
             next_session_id: 1,
             settings: false,
+            help: false,
+            about: false,
             directory: base.display().to_string(),
             status: String::new(),
             storage: base.join("unused-profile-test.json"),

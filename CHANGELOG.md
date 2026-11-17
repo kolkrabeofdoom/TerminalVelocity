@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.0.0 – Voll-Release
+
+- **Hilfe-Sektion (`F1` / „Hilfe“)**: Integrierte Übersicht aller Tastenkürzel und Bedienungsabläufe direkt in der Anwendung.
+- **Über-Bereich („Über“)**: Zeigt Version, Lizenz, direkte Links zum GitHub-Repository und den Releases sowie die aktuellen Release Notes (`RELEASE_NOTES.md`).
+- **Code-Review- & Editor-Verbesserungen**: Rückwärtssuche (`Umschalt+Enter`) und `Escape` zum Schließen in der Editor-Suche, erweitertes Syntax-Highlighting (inkl. Rust, Python, JS/TS, Go, C/C++, YAML mit `//`-Kommentaren), entkoppelter `PaneRenderContext` und vollständige Beseitigung aller `clippy`-Warnungen (`-D warnings`).
+- **README-Banner**: Neues TerminalVelocity-Banner (`assets/banner.jpg`) und vollständige 1.0.0-Dokumentation.
+
 ## 0.9.3 – Security-Hardening-Release
 
 - **Link-Härtung (`Strg+Klick`)**: Nur noch wohlgeformte `http://`- und `https://`-Links mit nicht-leerem Host werden erkannt und geöffnet; `file://`-, UNC- und Fremdprotokoll-Schemata sowie der Prozess-Panic bei fehlgeschlagenem `open::that`-Aufruf wurden entfernt.

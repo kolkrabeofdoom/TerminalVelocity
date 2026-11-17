@@ -1,9 +1,9 @@
 [package]
 name = "terminalvelocity"
-version = "0.9.3"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
-description = "Portable Windows terminal prototype"
+description = "Portable Windows terminal with split panes, AI CLI integration, SSH/WinRM, built-in editor, and Sixel/image support"
 
 [[bin]]
 name = "TerminalVelocity"

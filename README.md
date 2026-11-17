@@ -1,10 +1,12 @@
 # TerminalVelocity
 
+![TerminalVelocity Banner](assets/banner.jpg)
+
 TerminalVelocity ist ein Windows-Terminal mit Tabs, geteilten Ansichten, SSH- und WinRM-Verbindungen, einem lokalen Texteditor und Bildanzeige. Vorhandene KI-Kommandozeilenprogramme lassen sich als eigene Sitzungen starten; markierte Terminalausgaben können nach Prüfung an sie übergeben werden.
 
-**Version 0.9.3 · Windows x64 · MIT-Lizenz**
+**Version 1.0.0 · Windows x64 · MIT-Lizenz**
 
-[Download und Release Notes](https://github.com/kolkrabeofdoom/TerminalVelocity/releases/latest) · [Änderungsverlauf](CHANGELOG.md) · [Prüfbericht](VERIFICATION.md)
+[Download und Release Notes](https://github.com/kolkrabeofdoom/TerminalVelocity/releases/latest) · [Änderungsverlauf](CHANGELOG.md) · [Prüfbericht](VERIFICATION.md) · [GitHub-Repository](https://github.com/kolkrabeofdoom/TerminalVelocity)
 
 ## Inhalt
 
@@ -18,6 +20,7 @@ TerminalVelocity ist ein Windows-Terminal mit Tabs, geteilten Ansichten, SSH- un
 - [Lokaler Texteditor](#lokaler-texteditor)
 - [Bilder im Terminal](#bilder-im-terminal)
 - [Darstellung und Grafikeffekte](#darstellung-und-grafikeffekte)
+- [Hilfe und Über TerminalVelocity](#hilfe-und-über-terminalvelocity)
 - [Tastenkürzel](#tastenkürzel)
 - [Gespeicherte Daten](#gespeicherte-daten)
 - [Bekannte Grenzen](#bekannte-grenzen)
@@ -247,12 +250,18 @@ PNG, JPEG, WebP und BMP werden unterstützt. Es gelten dieselben Quelldateigrenz
 
 Hintergrundbild und Effekt-Preset sind unabhängig. Das Bild liegt hinter Terminalinhalt und Effekten. Gespeichert wird der Dateipfad, keine Bildkopie; relative Pfade gelten zum Programmordner. Nach dem Verschieben einer Bilddatei muss der Pfad angepasst werden.
 
+## Hilfe und Über TerminalVelocity
+
+- **Hilfe (`F1` oder Button „Hilfe“)**: Zeigt eine kompakte Übersicht aller Tastenkürzel sowie Hinweise zu Dateipfad-/Stacktrace-Öffnung, KI-Übergabe, Remote-Verbindungen, Projektprofilen und Bildanzeige.
+- **Über (`Über` in der oberen Leiste oder über die Befehlspalette)**: Zeigt die installierte Version, die Lizenz, direkte Links zum [GitHub-Repository](https://github.com/kolkrabeofdoom/TerminalVelocity) und zur [Release-Seite](https://github.com/kolkrabeofdoom/TerminalVelocity/releases) sowie die vollständigen aktuellen Release Notes.
+
 ## Tastenkürzel
 
 ### Terminal
 
 | Aktion | Tastenkürzel |
 | --- | --- |
+| Hilfe öffnen / schließen | F1 |
 | Befehlspalette | Strg+Umschalt+P |
 | Neuer Tab | Strg+Umschalt+T |
 | Bereiche nebeneinander | Strg+Umschalt+D |
@@ -348,7 +357,7 @@ Weitere Diagnosemodi der EXE sind `--smoke-test`, `--directory-test`, `--restart
 ./scripts/package.ps1
 ```
 
-Das Skript führt Tests und Build aus, ergänzt die festgeschriebenen PowerShell- und ConPTY-Dateien und erstellt `dist/TerminalVelocity-0.9.3-Windows-x64.zip` sowie eine `.sha256`-Datei. Downloadquellen und Prüfsummen stehen in [powershell-source.json](shells/powershell-source.json) und [conpty-source.json](shells/conpty-source.json).
+Das Skript führt Tests und Build aus, ergänzt die festgeschriebenen PowerShell- und ConPTY-Dateien und erstellt `dist/TerminalVelocity-1.0.0-Windows-x64.zip` sowie eine `.sha256`-Datei. Downloadquellen und Prüfsummen stehen in [powershell-source.json](shells/powershell-source.json) und [conpty-source.json](shells/conpty-source.json).
 
 Mit `-OutputDirectory <neuer Ordner>` wird ein anderes Ziel verwendet; bestehende Paketordner werden nicht überschrieben. `-SkipBuild` ist nur für einen bereits zum aktuellen Quellstand passenden Release-Build gedacht. KI-CLIs, persönliche Einstellungen und Zugangsdaten werden nicht eingepackt.
 
@@ -357,7 +366,7 @@ Mit `-OutputDirectory <neuer Ordner>` wird ein anderes Ziel verwendet; bestehend
 Die ZIP-Prüfsumme lässt sich mit PowerShell ermitteln und mit der veröffentlichten `.sha256`-Datei vergleichen:
 
 ```powershell
-Get-FileHash .\TerminalVelocity-0.9.3-Windows-x64.zip -Algorithm SHA256
+Get-FileHash .\TerminalVelocity-1.0.0-Windows-x64.zip -Algorithm SHA256
 ```
 
 ## Technik und Lizenzen
