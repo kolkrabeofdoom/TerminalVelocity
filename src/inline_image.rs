@@ -78,9 +78,11 @@ pub fn take_drop(ctx: &egui::Context, rect: egui::Rect) -> Vec<egui::DroppedFile
     })
 }
 
+type ImageJob = (u64, usize, mpsc::Receiver<Result<image::RgbaImage, String>>);
+
 #[derive(Default)]
 pub struct Loader {
-    pending: Option<(u64, usize, mpsc::Receiver<Result<image::RgbaImage, String>>)>,
+    pending: Option<ImageJob>,
 }
 
 pub fn fit(image: image::RgbaImage, available: usize) -> image::RgbaImage {

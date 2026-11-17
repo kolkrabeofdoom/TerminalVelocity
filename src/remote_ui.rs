@@ -7,10 +7,7 @@ impl TerminalApp {
         placement: usize,
         ctx: &egui::Context,
     ) -> Result<(), String> {
-        let command = connection.command(
-            &self.workspace,
-            self.storage.parent().unwrap_or(std::path::Path::new(".")),
-        )?;
+        let command = connection.command(&self.workspace, self.app_dir())?;
         let pane = Pane {
             id: self.next_id,
             shell: Shell::PowerShell,

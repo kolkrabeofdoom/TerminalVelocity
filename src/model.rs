@@ -73,6 +73,7 @@ pub fn atomic_write_json(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::enum_variant_names)]
 pub enum Shell {
     #[default]
     PowerShell,
@@ -113,7 +114,7 @@ impl Shell {
         }
     }
     pub fn executable(self) -> Option<PathBuf> {
-        self.resolve(None, &std::env::current_exe().ok()?.parent()?.to_path_buf())
+        self.resolve(None, std::env::current_exe().ok()?.parent()?)
     }
     pub fn resolve(self, custom: Option<&str>, app_dir: &std::path::Path) -> Option<PathBuf> {
         if let Some(value) = custom.filter(|value| !value.trim().is_empty()) {
@@ -545,7 +546,11 @@ impl Workspace {
                     second,
                     ..
                 } => {
-                    *ratio = ratio.clamp(0.15, 0.85);
+                    *ratio = if ratio.is_finite() {
+                        ratio.clamp(0.15, 0.85)
+                    } else {
+                        0.5
+                    };
                     walk(first, depth + 1, ids)?;
                     walk(second, depth + 1, ids)?;
                 }
@@ -556,8 +561,16 @@ impl Workspace {
             walk(&mut tab.root, 0, &mut ids)?;
         }
         self.active_tab = self.active_tab.min(self.tabs.len().saturating_sub(1));
-        self.opacity = self.opacity.clamp(0.0, 1.0);
-        self.font_size = self.font_size.clamp(10.0, 28.0);
+        self.opacity = if self.opacity.is_finite() {
+            self.opacity.clamp(0.0, 1.0)
+        } else {
+            0.82
+        };
+        self.font_size = if self.font_size.is_finite() {
+            self.font_size.clamp(10.0, 28.0)
+        } else {
+            16.0
+        };
         Ok(())
     }
     pub fn panes(&self) -> Vec<Pane> {
@@ -605,8 +618,10 @@ mod tests {
     }
     #[test]
     fn ai_workspace_roundtrip_keeps_provider_and_custom_path() {
-        let mut workspace = Workspace::default();
-        workspace.default_shell = Shell::Antigravity;
+        let mut workspace = Workspace {
+            default_shell: Shell::Antigravity,
+            ..Workspace::default()
+        };
         workspace.shell_paths[Shell::Antigravity as usize] = "tools/agy.exe".into();
         let encoded = serde_json::to_string(&workspace).unwrap();
         let mut restored: Workspace = serde_json::from_str(&encoded).unwrap();
@@ -708,9 +723,33 @@ mod tests {
             }),
         });
         assert!(ws.validate().is_err());
-        let mut ws = Workspace::default();
-        ws.ssh_path = r"\\198.51.100.1\share\ssh.exe".into();
+        let mut ws = Workspace {
+            ssh_path: r"\\198.51.100.1\share\ssh.exe".into(),
+            ..Workspace::default()
+        };
         assert!(ws.validate().is_err());
+
+        let mut nan_ws = Workspace {
+            opacity: f32::NAN,
+            font_size: f32::INFINITY,
+            tabs: vec![Tab {
+                name: "split".into(),
+                root: Node::Split {
+                    axis: Axis::Columns,
+                    ratio: f32::NAN,
+                    first: Box::new(Node::Pane(pane(1))),
+                    second: Box::new(Node::Pane(pane(2))),
+                },
+            }],
+            ..Workspace::default()
+        };
+        nan_ws.validate().unwrap();
+        assert_eq!(nan_ws.opacity, 0.82);
+        assert_eq!(nan_ws.font_size, 16.0);
+        assert!(matches!(
+            nan_ws.tabs[0].root,
+            Node::Split { ratio, .. } if (ratio - 0.5).abs() < f32::EPSILON
+        ));
 
         let (_, args) = Shell::PowerShell
             .launch(PathBuf::from("pwsh.exe"), &base, false)

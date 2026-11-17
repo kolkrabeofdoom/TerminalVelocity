@@ -618,27 +618,45 @@ impl Editor {
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|| format!("Neue Datei · Startordner: {}", base.display())),
             );
-            let mut jump = false;
+            let mut jump_forward = false;
+            let mut jump_backward = false;
             if self.search {
-                ui.horizontal(|ui| {
-                    let response = ui.add(
-                        egui::TextEdit::singleline(&mut self.query)
-                            .hint_text("Wörtliche Suche, Groß-/Kleinschreibung")
-                            .char_limit(256),
-                    );
-                    if self.focus_search {
-                        response.request_focus();
-                        self.focus_search = false;
-                    }
-                    if response.changed() {
-                        self.next_match = 0;
-                    }
-                    jump = ui.button("Nächster Treffer").clicked()
-                        || (response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)));
-                    if ui.button("Schließen").clicked() {
-                        self.search = false;
-                    }
-                });
+                if ui.is_enabled() && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape))
+                {
+                    self.search = false;
+                } else {
+                    ui.horizontal(|ui| {
+                        let response = ui.add(
+                            egui::TextEdit::singleline(&mut self.query)
+                                .hint_text("Wörtliche Suche, Groß-/Kleinschreibung")
+                                .char_limit(256),
+                        );
+                        if self.focus_search {
+                            response.request_focus();
+                            self.focus_search = false;
+                        }
+                        if response.changed() {
+                            self.next_match = 0;
+                        }
+                        let enter_shift = response.lost_focus()
+                            && ui.input(|i| i.key_pressed(Key::Enter) && i.modifiers.shift);
+                        let enter_plain = response.lost_focus()
+                            && ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+                        jump_backward = ui
+                            .button("Zurück")
+                            .on_hover_text("Umschalt+Enter")
+                            .clicked()
+                            || enter_shift;
+                        jump_forward = ui
+                            .button("Nächster Treffer")
+                            .on_hover_text("Enter")
+                            .clicked()
+                            || enter_plain;
+                        if ui.button("Schließen").on_hover_text("Esc").clicked() {
+                            self.search = false;
+                        }
+                    });
+                }
             }
             let range = if let Some(line) = self.jump_line.take() {
                 let total_lines = self.document.text.bytes().filter(|b| *b == b'\n').count() + 1;
@@ -647,7 +665,7 @@ impl Editor {
                     self.message = format!("Zeile {target} / {total_lines}");
                 }
                 Some(line_char_range(&self.document.text, target))
-            } else if jump && !self.query.is_empty() {
+            } else if (jump_forward || jump_backward) && !self.query.is_empty() {
                 let matches: Vec<_> = self
                     .document
                     .text
@@ -658,9 +676,14 @@ impl Editor {
                     self.message = "Keine Treffer".into();
                     None
                 } else {
-                    let index = self.next_match % matches.len();
-                    self.next_match = index + 1;
-                    self.message = format!("Treffer {} / {}", index + 1, matches.len());
+                    let len = matches.len();
+                    let index = if jump_backward {
+                        (self.next_match + len.saturating_sub(2)) % len
+                    } else {
+                        self.next_match % len
+                    };
+                    self.next_match = (index + 1) % len;
+                    self.message = format!("Treffer {} / {}", index + 1, len);
                     let found = matches[index].clone();
                     Some(
                         self.document.text[..found.start].chars().count()
@@ -765,7 +788,7 @@ fn choose_file(
     }
     let directory: Vec<_> = folder.as_os_str().encode_wide().chain(Some(0)).collect();
     let filter: Vec<_> =
-        "Text und Skripte\0*.txt;*.ps1;*.sh;*.json;*.toml;*.md;*.bash\0Alle Dateien\0*.*\0\0"
+        "Text und Code\0*.txt;*.ps1;*.sh;*.json;*.toml;*.md;*.bash;*.rs;*.py;*.js;*.ts;*.yaml;*.yml;*.cmd;*.bat\0Alle Dateien\0*.*\0\0"
             .encode_utf16()
             .collect();
     unsafe {
@@ -808,8 +831,33 @@ fn highlight(text: &str, extension: &str, row_height: f32) -> egui::text::Layout
     let mut job = egui::text::LayoutJob::default();
     let supported = matches!(
         extension,
-        "ps1" | "psm1" | "sh" | "bash" | "json" | "toml" | "md" | "markdown"
+        "ps1"
+            | "psm1"
+            | "sh"
+            | "bash"
+            | "json"
+            | "toml"
+            | "md"
+            | "markdown"
+            | "rs"
+            | "py"
+            | "js"
+            | "ts"
+            | "tsx"
+            | "jsx"
+            | "go"
+            | "c"
+            | "cpp"
+            | "h"
+            | "yaml"
+            | "yml"
     );
+    let slash_comments = matches!(
+        extension,
+        "rs" | "js" | "ts" | "tsx" | "jsx" | "go" | "c" | "cpp" | "h"
+    );
+    let hash_comments =
+        supported && !matches!(extension, "json" | "js" | "ts" | "tsx" | "jsx" | "go");
     let mut remaining = text;
     while !remaining.is_empty() {
         let first = remaining.chars().next().unwrap();
@@ -819,7 +867,8 @@ fn highlight(text: &str, extension: &str, row_height: f32) -> egui::text::Layout
             length = remaining
                 .find(|c: char| !c.is_whitespace())
                 .unwrap_or(remaining.len());
-        } else if supported && first == '#' && extension != "json" {
+        } else if (hash_comments && first == '#') || (slash_comments && remaining.starts_with("//"))
+        {
             length = remaining.find('\n').unwrap_or(remaining.len());
             color = Color32::from_rgb(120, 180, 140);
         } else if supported && matches!(first, '\'' | '"' | '`') {
@@ -844,7 +893,7 @@ fn highlight(text: &str, extension: &str, row_height: f32) -> egui::text::Layout
                 && (first.is_ascii_digit()
                     || matches!(
                         token.to_ascii_lowercase().as_str(),
-                        "true" | "false" | "null" | "$true" | "$false" | "$null"
+                        "true" | "false" | "null" | "none" | "$true" | "$false" | "$null"
                     ))
             {
                 color = Color32::from_rgb(190, 150, 230);
@@ -854,14 +903,31 @@ fn highlight(text: &str, extension: &str, row_height: f32) -> egui::text::Layout
                         token.to_ascii_lowercase().as_str(),
                         "if" | "else"
                             | "elseif"
+                            | "elif"
                             | "then"
                             | "fi"
                             | "for"
                             | "foreach"
                             | "while"
+                            | "loop"
                             | "do"
                             | "done"
                             | "function"
+                            | "fn"
+                            | "def"
+                            | "class"
+                            | "struct"
+                            | "enum"
+                            | "impl"
+                            | "trait"
+                            | "pub"
+                            | "let"
+                            | "mut"
+                            | "const"
+                            | "use"
+                            | "import"
+                            | "from"
+                            | "match"
                             | "return"
                             | "param"
                             | "try"
@@ -976,16 +1042,20 @@ mod tests {
             assert_eq!(fs::read(fixture.path()).unwrap(), bytes);
         }
         assert!(read_file(&fixture.0).is_err());
-        let mut doc = Document::default();
-        doc.text = "🦀".repeat(LIMIT);
+        let doc = Document {
+            text: "🦀".repeat(LIMIT),
+            ..Document::default()
+        };
         assert!(doc.bytes().is_err());
     }
 
     #[test]
     fn new_file_and_save_as_preserve_original_document() {
         let fixture = Fixture::new();
-        let mut doc = Document::default();
-        doc.text = "new\n".into();
+        let mut doc = Document {
+            text: "new\n".into(),
+            ..Document::default()
+        };
         doc.save_to(fixture.path(), None).unwrap();
         doc.text = "changed\n".into();
         let other = fixture.0.join("copy.txt");
@@ -1017,8 +1087,9 @@ mod tests {
 
     #[test]
     fn syntax_layout_preserves_unicode_and_all_source_bytes() {
-        let text = "# Grüße 🦀\nif ($true) { echo \"a\\\"b\" }\n[section]\nkey = 'value'\n";
-        for extension in ["ps1", "sh", "json", "toml", "md", "txt"] {
+        let text =
+            "# Grüße 🦀\n// Kommentar ü\nfn main() { if ($true) { echo \"a\\\"b\" } }\n[section]\nkey = 'value'\n";
+        for extension in ["ps1", "sh", "json", "toml", "md", "rs", "py", "ts", "txt"] {
             let job = highlight(text, extension, 17.0);
             assert_eq!(job.text, text);
             let recovered: String = job

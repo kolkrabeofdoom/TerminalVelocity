@@ -267,6 +267,39 @@ impl TerminalApp {
         app
     }
 
+    fn app_dir(&self) -> &std::path::Path {
+        self.storage.parent().unwrap_or(std::path::Path::new("."))
+    }
+
+    fn has_modal_dialog(&self) -> bool {
+        self.editor.blocked()
+            || self.settings
+            || self.profile_dialog.is_some()
+            || self.remote_dialog.is_some()
+            || self.ai_draft.is_some()
+            || self.close_target.is_some()
+            || self.restart_target.is_some()
+    }
+
+    fn is_terminal_interactive(&self) -> bool {
+        !self.editor.active
+            && !self.has_modal_dialog()
+            && self.palette.is_none()
+            && self.search.is_none()
+    }
+
+    fn clear_tab_notifications(&mut self, tab_index: usize) {
+        if let Some(tab) = self.workspace.tabs.get(tab_index) {
+            let mut panes = Vec::new();
+            tab.root.panes(&mut panes);
+            for pane in panes {
+                if let Some(session) = self.sessions.get_mut(&pane.id) {
+                    session.notified = false;
+                }
+            }
+        }
+    }
+
     fn start(&mut self, ctx: &egui::Context, pane: &Pane) {
         self.start_with_command(ctx, pane, None);
     }
@@ -282,6 +315,7 @@ impl TerminalApp {
         self.sessions.remove(&pane.id);
         let generation = self.next_session_id;
         self.next_session_id += 1;
+        let app_dir = self.app_dir().to_path_buf();
         let result = (|| {
             if !pane.directory.is_dir() {
                 return Err(format!("Startordner fehlt: {}", pane.directory.display()));
@@ -289,23 +323,21 @@ impl TerminalApp {
             let (executable, args) = if let Some(command) = command {
                 command
             } else if let Some(remote) = &pane.remote {
-                remote.command(
-                    &self.workspace,
-                    self.storage.parent().unwrap_or(std::path::Path::new(".")),
-                )?
+                remote.command(&self.workspace, &app_dir)?
             } else {
-                let executable = pane.shell.resolve(Some(&self.workspace.shell_paths[pane.shell as usize]), self.storage.parent().unwrap_or(std::path::Path::new("."))).ok_or_else(|| {
-                format!(
-                    "{} wurde nicht gefunden. Unter Einstellungen → Shell-Programme einen Pfad angeben oder die portable Shell im Programmordner ablegen.",
-                    pane.shell.label()
-                )
-            })?;
-                let (executable, args) = pane.shell.launch(
-                    executable,
-                    self.storage.parent().unwrap_or(std::path::Path::new(".")),
-                    false,
-                )?;
-                (executable, args)
+                let executable = pane
+                    .shell
+                    .resolve(
+                        Some(&self.workspace.shell_paths[pane.shell as usize]),
+                        &app_dir,
+                    )
+                    .ok_or_else(|| {
+                        format!(
+                            "{} wurde nicht gefunden. Unter Einstellungen → Shell-Programme einen Pfad angeben oder die portable Shell im Programmordner ablegen.",
+                            pane.shell.label()
+                        )
+                    })?;
+                pane.shell.launch(executable, &app_dir, false)?
             };
             TerminalBackend::new(
                 generation,
@@ -343,7 +375,7 @@ impl TerminalApp {
             return Err("Limit: 32 Tabs / 64 Bereiche erreicht.".into());
         }
         let draft = self.ai_draft.as_ref().ok_or("Keine Auswahl vorhanden")?;
-        let base = self.storage.parent().unwrap_or(std::path::Path::new("."));
+        let base = self.app_dir();
         let executable = draft
             .provider
             .resolve(
@@ -562,11 +594,7 @@ impl TerminalApp {
             .search
             .as_ref()
             .is_some_and(|s| s.pane_id != self.focused)
-            || self.settings
-            || (self.profile_dialog.is_some() || self.remote_dialog.is_some())
-            || self.ai_draft.is_some()
-            || self.restart_target.is_some()
-            || self.close_target.is_some()
+            || self.has_modal_dialog()
         {
             self.close_search();
         }
@@ -652,7 +680,7 @@ impl TerminalApp {
             .into_iter()
             .filter(|p| p.id >= self.next_id)
             .collect();
-        let base = self.storage.parent().unwrap_or(std::path::Path::new("."));
+        let base = self.app_dir();
         for pane in &panes {
             if let Some(remote) = &pane.remote {
                 remote.command(&workspace, base)?;
@@ -947,13 +975,7 @@ impl TerminalApp {
                 if index < self.workspace.tabs.len() {
                     self.editor.active = false;
                     self.workspace.active_tab = index;
-                    let mut panes = Vec::new();
-                    self.workspace.tabs[index].root.panes(&mut panes);
-                    for p in panes {
-                        if let Some(s) = self.sessions.get_mut(&p.id) {
-                            s.notified = false;
-                        }
-                    }
+                    self.clear_tab_notifications(index);
                     self.focus_first();
                 }
             }
@@ -1060,22 +1082,21 @@ impl TerminalApp {
     }
 }
 
-fn draw_node(
-    ui: &mut egui::Ui,
-    rect: Rect,
-    node: &mut Node,
-    sessions: &mut HashMap<u64, Session>,
-    focused: &mut u64,
+struct PaneRenderContext<'a> {
+    sessions: &'a mut HashMap<u64, Session>,
+    focused: &'a mut u64,
     font_size: f32,
-    effects: &effects::Settings,
+    effects: &'a effects::Settings,
     background_image: Option<egui_term::BackgroundImage>,
     enabled: bool,
-    close: &mut Option<u64>,
-    retry: &mut Option<u64>,
-    ai_selection: &mut Option<ai::Draft>,
-    image_request: &mut Option<inline_image::Request>,
-    editor_request: &mut Option<editor::Request>,
-) {
+    close: &'a mut Option<u64>,
+    retry: &'a mut Option<u64>,
+    ai_selection: &'a mut Option<ai::Draft>,
+    image_request: &'a mut Option<inline_image::Request>,
+    editor_request: &'a mut Option<editor::Request>,
+}
+
+fn draw_node(ui: &mut egui::Ui, rect: Rect, node: &mut Node, ctx: &mut PaneRenderContext<'_>) {
     match node {
         Node::Split {
             axis,
@@ -1119,60 +1140,31 @@ fn draw_node(
                     Color32::from_gray(50)
                 },
             );
-            draw_node(
-                ui,
-                a,
-                first,
-                sessions,
-                focused,
-                font_size,
-                effects,
-                background_image,
-                enabled,
-                close,
-                retry,
-                ai_selection,
-                image_request,
-                editor_request,
-            );
-            draw_node(
-                ui,
-                b,
-                second,
-                sessions,
-                focused,
-                font_size,
-                effects,
-                background_image,
-                enabled,
-                close,
-                retry,
-                ai_selection,
-                image_request,
-                editor_request,
-            );
+            draw_node(ui, a, first, ctx);
+            draw_node(ui, b, second, ctx);
         }
         Node::Pane(pane) => {
             if rect.width() < 40.0 || rect.height() < 70.0 {
                 return;
             }
+            let enabled = ctx.enabled;
             if enabled
                 && ui.input(|i| {
                     i.pointer.any_pressed()
                         && i.pointer.interact_pos().is_some_and(|p| rect.contains(p))
                 })
             {
-                *focused = pane.id;
+                *ctx.focused = pane.id;
             }
-            let active = pane.id == *focused;
+            let active = pane.id == *ctx.focused;
             ui.painter().rect_stroke(
                 rect.shrink(0.5),
                 3.0,
                 Stroke::new(
                     1.0_f32,
                     if active {
-                        if effects.visual().strength() > 0.0 {
-                            effects.visual().accent()
+                        if ctx.effects.visual().strength() > 0.0 {
+                            ctx.effects.visual().accent()
                         } else {
                             Color32::from_rgb(66, 195, 185)
                         }
@@ -1191,73 +1183,116 @@ fn draw_node(
                         } else {
                             Color32::GRAY
                         },
-                        pane.remote.as_ref().map(|r| r.label()).unwrap_or_else(|| pane.shell.label().into()),
+                        pane.remote
+                            .as_ref()
+                            .map(|r| r.label())
+                            .unwrap_or_else(|| pane.shell.label().into()),
                     );
                     ui.small(format!("#{}", pane.id));
-                    if sessions.get(&pane.id).is_some_and(|s| s.notified) {
-                        ui.colored_label(effects.visual().accent(), "●")
+                    if ctx.sessions.get(&pane.id).is_some_and(|s| s.notified) {
+                        ui.colored_label(ctx.effects.visual().accent(), "●")
                             .on_hover_text("Neues Signal oder beendete Sitzung in diesem Bereich");
                     }
-                    if ui.add_enabled(enabled, egui::Button::new(if pane.remote.is_some() { "Neu verbinden" } else { "Sitzung neu starten" }).small()).on_hover_text("Gleicher Anbieter und aktueller Projektordner; bisherige Ausgabe wird geleert").clicked() {
-                        *retry = Some(pane.id);
+                    if ui
+                        .add_enabled(
+                            enabled,
+                            egui::Button::new(if pane.remote.is_some() {
+                                "Neu verbinden"
+                            } else {
+                                "Sitzung neu starten"
+                            })
+                            .small(),
+                        )
+                        .on_hover_text(
+                            "Gleicher Anbieter und aktueller Projektordner; bisherige Ausgabe wird geleert",
+                        )
+                        .clicked()
+                    {
+                        *ctx.retry = Some(pane.id);
                     }
                     if ui
                         .add_enabled(enabled, egui::Button::new("×").small())
                         .on_hover_text("Bereich schließen · Strg+Umschalt+W")
                         .clicked()
                     {
-                        *close = Some(pane.id);
+                        *ctx.close = Some(pane.id);
                     }
                     ui.add(
                         egui::Label::new(
-                            egui::RichText::new(format!("{}{}", if pane.remote.is_some() { "Lokaler Startordner: " } else { "" }, pane.directory.display()))
-                                .small()
-                                .weak(),
+                            egui::RichText::new(format!(
+                                "{}{}",
+                                if pane.remote.is_some() {
+                                    "Lokaler Startordner: "
+                                } else {
+                                    ""
+                                },
+                                pane.directory.display()
+                            ))
+                            .small()
+                            .weak(),
                         )
                         .truncate(),
                     )
                     .on_hover_text(pane.directory.display().to_string());
                 });
                 ui.separator();
-                if let Some(session) = sessions.get_mut(&pane.id) {
+                if let Some(session) = ctx.sessions.get_mut(&pane.id) {
                     if let Some(error) = &session.error {
                         ui.colored_label(Color32::LIGHT_RED, error);
-                        if ui.add_enabled(enabled, egui::Button::new("Sitzung neu starten")).clicked() {
-                            *retry = Some(pane.id);
+                        if ui
+                            .add_enabled(enabled, egui::Button::new("Sitzung neu starten"))
+                            .clicked()
+                        {
+                            *ctx.retry = Some(pane.id);
                         }
                     }
                     if session.exited {
                         ui.colored_label(
                             Color32::YELLOW,
-                            if pane.remote.is_some() { "Verbindung beendet. Ausgabe bleibt erhalten; oben mit „Neu verbinden“ erneut öffnen." } else { "Sitzung beendet. Mit „Sitzung neu starten“ oben erneut öffnen." },
+                            if pane.remote.is_some() {
+                                "Verbindung beendet. Ausgabe bleibt erhalten; oben mit „Neu verbinden“ erneut öffnen."
+                            } else {
+                                "Sitzung beendet. Mit „Sitzung neu starten“ oben erneut öffnen."
+                            },
                         );
                     }
                     if let Some(backend) = &mut session.backend {
                         let view = TerminalView::new(ui, backend)
-                            .set_background_image(background_image)
-                            .set_effects(effects.visual())
-                            .set_theme(effects.theme())
+                            .set_background_image(ctx.background_image)
+                            .set_effects(ctx.effects.visual())
+                            .set_theme(ctx.effects.theme())
                             .set_focus(active && enabled && !session.exited)
                             .set_font(TerminalFont::new(FontSettings {
-                                font_type: FontId::monospace(font_size),
+                                font_type: FontId::monospace(ctx.font_size),
                             }));
                         let response = ui.add(view);
                         if enabled {
-                            let over_image_target = ui.input(|i| i.pointer.latest_pos().is_some_and(|p| response.rect.contains(p)));
+                            let over_image_target = ui.input(|i| {
+                                i.pointer
+                                    .latest_pos()
+                                    .is_some_and(|p| response.rect.contains(p))
+                            });
                             if over_image_target {
                                 let files = inline_image::take_drop(ui.ctx(), response.rect);
-                                if !files.is_empty() { *image_request = Some(inline_image::Request::Drop(pane.id, files)); }
+                                if !files.is_empty() {
+                                    *ctx.image_request =
+                                        Some(inline_image::Request::Drop(pane.id, files));
+                                }
                                 if ui.input(|i| !i.raw.hovered_files.is_empty()) {
-                                    ui.painter().rect_stroke(response.rect.shrink(1.0), 2.0, Stroke::new(2.0_f32, Color32::LIGHT_BLUE), egui::StrokeKind::Inside);
+                                    ui.painter().rect_stroke(
+                                        response.rect.shrink(1.0),
+                                        2.0,
+                                        Stroke::new(2.0_f32, Color32::LIGHT_BLUE),
+                                        egui::StrokeKind::Inside,
+                                    );
                                 }
                             }
                             let image_target_id = response.id.with("clicked-image-path");
                             let editor_target_id = response.id.with("clicked-editor-path");
                             if response.secondary_clicked() {
                                 let (image_path, editor_path) = if pane.remote.is_none() {
-                                    if let Some((text, offset)) = response
-                                        .interact_pointer_pos()
-                                        .and_then(|pos| {
+                                    if let Some((text, offset)) =
+                                        response.interact_pointer_pos().and_then(|pos| {
                                             backend.text_at_pixel(
                                                 pos.x - response.rect.min.x,
                                                 pos.y - response.rect.min.y,
@@ -1288,10 +1323,11 @@ fn draw_node(
                                         )
                                     })
                                     .flatten();
-                                let editor_label = match editor_target.as_ref().and_then(|(_, line)| *line) {
-                                    Some(line) => format!("Datei im Editor öffnen (Zeile {line})"),
-                                    None => "Datei im Editor öffnen".into(),
-                                };
+                                let editor_label =
+                                    match editor_target.as_ref().and_then(|(_, line)| *line) {
+                                        Some(line) => format!("Datei im Editor öffnen (Zeile {line})"),
+                                        None => "Datei im Editor öffnen".into(),
+                                    };
                                 if ui
                                     .add_enabled(
                                         editor_target.is_some(),
@@ -1305,47 +1341,91 @@ fn draw_node(
                                                 None => p.display().to_string(),
                                             })
                                             .unwrap_or_else(|| {
-                                                "Rechtsklick auf einen lokalen Dateipfad (optional mit :Zeile).".into()
+                                                "Rechtsklick auf einen lokalen Dateipfad (optional mit :Zeile)."
+                                                    .into()
                                             }),
                                     )
                                     .clicked()
                                 {
-                                    *editor_request = editor_target.map(|(path, line)| {
+                                    *ctx.editor_request = editor_target.map(|(path, line)| {
                                         editor::Request::OpenFile(path, line)
                                     });
                                     ui.close_menu();
                                 }
-                                let path = ui.ctx().data(|data| data.get_temp::<Option<PathBuf>>(image_target_id)).flatten();
-                                if ui.add_enabled(path.is_some(), egui::Button::new("Bild öffnen"))
-                                    .on_hover_text(path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "Rechtsklick auf einen lokalen Bilddateipfad. Remote-Pfade werden nicht lokal geöffnet.".into())).clicked() {
-                                    *image_request = path.map(|path| inline_image::Request::Open(pane.id, path));
+                                let path = ui
+                                    .ctx()
+                                    .data(|data| data.get_temp::<Option<PathBuf>>(image_target_id))
+                                    .flatten();
+                                if ui
+                                    .add_enabled(path.is_some(), egui::Button::new("Bild öffnen"))
+                                    .on_hover_text(
+                                        path.as_ref()
+                                            .map(|p| p.display().to_string())
+                                            .unwrap_or_else(|| {
+                                                "Rechtsklick auf einen lokalen Bilddateipfad. Remote-Pfade werden nicht lokal geöffnet."
+                                                    .into()
+                                            }),
+                                    )
+                                    .clicked()
+                                {
+                                    *ctx.image_request =
+                                        path.map(|path| inline_image::Request::Open(pane.id, path));
                                     ui.close_menu();
                                 }
                                 if ui.button("Bild auswählen …").clicked() {
-                                    *image_request = Some(inline_image::Request::Choose(pane.id));
+                                    *ctx.image_request =
+                                        Some(inline_image::Request::Choose(pane.id));
                                     ui.close_menu();
                                 }
                                 ui.separator();
                                 let text = backend.selectable_content();
                                 let selected = !text.trim().is_empty();
-                                if ui.add_enabled(selected, egui::Button::new("Kopieren")).clicked() { ui.ctx().copy_text(text.clone()); ui.close_menu(); }
-                                if ui.add_enabled(selected, egui::Button::new("Auswahl im Editor öffnen")).clicked() {
-                                    *editor_request = Some(editor::Request::OpenSelection(text.clone()));
+                                if ui.add_enabled(selected, egui::Button::new("Kopieren")).clicked() {
+                                    ui.ctx().copy_text(text.clone());
                                     ui.close_menu();
                                 }
-                                if ui.add_enabled(selected, egui::Button::new("An KI übergeben …")).clicked() {
-                                    *ai_selection = Some(ai::Draft::new(text.clone(), pane.directory.clone(), pane.shell));
+                                if ui
+                                    .add_enabled(
+                                        selected,
+                                        egui::Button::new("Auswahl im Editor öffnen"),
+                                    )
+                                    .clicked()
+                                {
+                                    *ctx.editor_request =
+                                        Some(editor::Request::OpenSelection(text.clone()));
+                                    ui.close_menu();
+                                }
+                                if ui
+                                    .add_enabled(selected, egui::Button::new("An KI übergeben …"))
+                                    .clicked()
+                                {
+                                    *ctx.ai_selection = Some(ai::Draft::new(
+                                        text.clone(),
+                                        pane.directory.clone(),
+                                        pane.shell,
+                                    ));
                                     ui.close_menu();
                                 }
                                 ui.separator();
-                                if pane.remote.is_some() { ui.small("KI-Übergabe öffnet eine lokale KI-Sitzung."); }
+                                if pane.remote.is_some() {
+                                    ui.small("KI-Übergabe öffnet eine lokale KI-Sitzung.");
+                                }
                                 for action in ai::QuickAction::ALL {
-                                    if ui.add_enabled(selected, egui::Button::new(action.label())).clicked() {
-                                        *ai_selection = Some(ai::Draft::new(action.prompt(&text), pane.directory.clone(), pane.shell));
+                                    if ui
+                                        .add_enabled(selected, egui::Button::new(action.label()))
+                                        .clicked()
+                                    {
+                                        *ctx.ai_selection = Some(ai::Draft::new(
+                                            action.prompt(&text),
+                                            pane.directory.clone(),
+                                            pane.shell,
+                                        ));
                                         ui.close_menu();
                                     }
                                 }
-                                if !selected { ui.weak("Zuerst Text im Terminal markieren."); }
+                                if !selected {
+                                    ui.weak("Zuerst Text im Terminal markieren.");
+                                }
                             });
                         }
                     }
@@ -1368,11 +1448,9 @@ impl eframe::App for TerminalApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        self.background_cache.update(
-            ctx,
-            &self.workspace.background,
-            self.storage.parent().unwrap_or(std::path::Path::new(".")),
-        );
+        let app_dir = self.app_dir().to_path_buf();
+        self.background_cache
+            .update(ctx, &self.workspace.background, &app_dir);
         let dialog_owner = raw_window_handle::HasWindowHandle::window_handle(frame)
             .ok()
             .and_then(|h| match h.as_raw() {
@@ -1411,15 +1489,7 @@ impl eframe::App for TerminalApp {
             shift: true,
             ..Modifiers::NONE
         };
-        if !self.editor.blocked()
-            && !self.settings
-            && self.profile_dialog.is_none()
-            && self.remote_dialog.is_none()
-            && self.ai_draft.is_none()
-            && self.close_target.is_none()
-            && self.restart_target.is_none()
-            && ctx.input_mut(|i| i.consume_key(shortcuts, Key::P))
-        {
+        if !self.has_modal_dialog() && ctx.input_mut(|i| i.consume_key(shortcuts, Key::P)) {
             if self.palette.is_some() {
                 self.palette = None;
             } else {
@@ -1427,29 +1497,13 @@ impl eframe::App for TerminalApp {
             }
         }
         if !self.editor.active
-            && !self.editor.blocked()
-            && !self.settings
+            && !self.has_modal_dialog()
             && self.palette.is_none()
-            && self.profile_dialog.is_none()
-            && self.remote_dialog.is_none()
-            && self.ai_draft.is_none()
-            && self.close_target.is_none()
-            && self.restart_target.is_none()
             && ctx.input_mut(|i| i.consume_key(Modifiers::CTRL, Key::F))
         {
             self.show_search();
         }
-        if !self.editor.active
-            && !self.editor.blocked()
-            && !self.settings
-            && self.palette.is_none()
-            && self.close_target.is_none()
-            && self.restart_target.is_none()
-            && self.ai_draft.is_none()
-            && self.profile_dialog.is_none()
-            && self.remote_dialog.is_none()
-            && self.search.is_none()
-        {
+        if self.is_terminal_interactive() {
             if ctx.input_mut(|i| i.consume_key(shortcuts, Key::T)) {
                 self.add_tab(ctx);
             }
@@ -1496,17 +1550,12 @@ impl eframe::App for TerminalApp {
                 {
                     ui.disable();
                 }
+                let dialog_free = !self.has_modal_dialog();
                 ui.add_space(5.0);
                 ui.horizontal_wrapped(|ui| {
                     ui.strong("TERMINALVELOCITY");
                     if ui
-                        .add_enabled(
-                            !self.settings
-                                && self.ai_draft.is_none()
-                                && self.close_target.is_none()
-                                && self.restart_target.is_none(),
-                            egui::Button::new("Befehle …"),
-                        )
+                        .add_enabled(dialog_free, egui::Button::new("Befehle …"))
                         .on_hover_text("Befehlspalette · Strg+Umschalt+P")
                         .clicked()
                     {
@@ -1517,13 +1566,7 @@ impl eframe::App for TerminalApp {
                         self.editor.activate();
                     }
                     if ui
-                        .add_enabled(
-                            !self.settings
-                                && self.ai_draft.is_none()
-                                && self.close_target.is_none()
-                                && self.restart_target.is_none(),
-                            egui::Button::new("Verbinden …"),
-                        )
+                        .add_enabled(dialog_free, egui::Button::new("Verbinden …"))
                         .clicked()
                     {
                         self.close_search();
@@ -1578,38 +1621,20 @@ impl eframe::App for TerminalApp {
                         self.settings = !self.settings;
                     }
                     if ui
-                        .add_enabled(
-                            !self.settings
-                                && self.ai_draft.is_none()
-                                && self.close_target.is_none()
-                                && self.restart_target.is_none(),
-                            egui::Button::new("Suchen"),
-                        )
+                        .add_enabled(dialog_free, egui::Button::new("Suchen"))
                         .on_hover_text("Strg+F · Aktiven Terminalverlauf durchsuchen")
                         .clicked()
                     {
                         self.show_search();
                     }
                     if ui
-                        .add_enabled(
-                            !self.settings
-                                && self.ai_draft.is_none()
-                                && self.close_target.is_none()
-                                && self.restart_target.is_none(),
-                            egui::Button::new("Projekt öffnen"),
-                        )
+                        .add_enabled(dialog_free, egui::Button::new("Projekt öffnen"))
                         .clicked()
                     {
                         self.show_profiles(false);
                     }
                     if ui
-                        .add_enabled(
-                            !self.settings
-                                && self.ai_draft.is_none()
-                                && self.close_target.is_none()
-                                && self.restart_target.is_none(),
-                            egui::Button::new("Projekt speichern …"),
-                        )
+                        .add_enabled(dialog_free, egui::Button::new("Projekt speichern …"))
                         .clicked()
                     {
                         self.show_profiles(true);
@@ -1650,15 +1675,7 @@ impl eframe::App for TerminalApp {
                     if let Some(index) = selected {
                         self.editor.active = false;
                         self.workspace.active_tab = index;
-                        if let Some(tab) = self.workspace.tabs.get(index) {
-                            let mut panes = Vec::new();
-                            tab.root.panes(&mut panes);
-                            for p in panes {
-                                if let Some(s) = self.sessions.get_mut(&p.id) {
-                                    s.notified = false;
-                                }
-                            }
-                        }
+                        self.clear_tab_notifications(index);
                         self.focus_first();
                     }
                 });
@@ -1677,47 +1694,33 @@ impl eframe::App for TerminalApp {
         let mut ai_selection = None;
         let mut image_request = None;
         let mut editor_request = None;
+        let editor_enabled = !self.has_modal_dialog() && self.palette.is_none();
+        let terminal_enabled = self.is_terminal_interactive();
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(background).inner_margin(8.0))
             .show(ctx, |ui| {
                 if self.editor.active {
-                    let enabled = !self.settings
-                        && self.palette.is_none()
-                        && self.ai_draft.is_none()
-                        && self.profile_dialog.is_none()
-                        && self.remote_dialog.is_none()
-                        && self.close_target.is_none()
-                        && self.restart_target.is_none();
-                    self.editor.ui(ui, dialog_owner, &editor_base, enabled);
+                    self.editor
+                        .ui(ui, dialog_owner, &editor_base, editor_enabled);
                     return;
                 }
                 let rect = ui.available_rect_before_wrap();
+                let background_image = self.background_cache.image(&self.workspace.background);
                 if let Some(tab) = self.workspace.tabs.get_mut(self.workspace.active_tab) {
-                    let enabled = !self.settings
-                        && self.palette.is_none()
-                        && self.close_target.is_none()
-                        && self.restart_target.is_none()
-                        && self.ai_draft.is_none()
-                        && self.profile_dialog.is_none()
-                        && self.remote_dialog.is_none()
-                        && self.search.is_none()
-                        && !self.editor.blocked();
-                    draw_node(
-                        ui,
-                        rect,
-                        &mut tab.root,
-                        &mut self.sessions,
-                        &mut self.focused,
-                        self.workspace.font_size,
-                        &self.workspace.effects,
-                        self.background_cache.image(&self.workspace.background),
-                        enabled,
-                        &mut self.close_target,
-                        &mut retry_target,
-                        &mut ai_selection,
-                        &mut image_request,
-                        &mut editor_request,
-                    );
+                    let mut render_ctx = PaneRenderContext {
+                        sessions: &mut self.sessions,
+                        focused: &mut self.focused,
+                        font_size: self.workspace.font_size,
+                        effects: &self.workspace.effects,
+                        background_image,
+                        enabled: terminal_enabled,
+                        close: &mut self.close_target,
+                        retry: &mut retry_target,
+                        ai_selection: &mut ai_selection,
+                        image_request: &mut image_request,
+                        editor_request: &mut editor_request,
+                    };
+                    draw_node(ui, rect, &mut tab.root, &mut render_ctx);
                 }
             });
         if let Some(request) = editor_request {
@@ -1901,7 +1904,7 @@ impl eframe::App for TerminalApp {
                 for shell in Shell::ALL {
                     ui.label(shell.label());
                     ui.add(egui::TextEdit::singleline(&mut self.workspace.shell_paths[shell as usize]).desired_width(480.0).hint_text("Vollständiger EXE-Pfad oder relativ zum Programmordner"));
-                    if let Some(path) = shell.resolve(Some(&self.workspace.shell_paths[shell as usize]), self.storage.parent().unwrap_or(std::path::Path::new("."))) {
+                    if let Some(path) = shell.resolve(Some(&self.workspace.shell_paths[shell as usize]), &app_dir) {
                         ui.label(egui::RichText::new(path.display().to_string()).small().color(Color32::LIGHT_GREEN));
                     } else { ui.colored_label(Color32::YELLOW, "Nicht gefunden"); }
                 }
@@ -2288,26 +2291,28 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
         std::env::temp_dir().join(format!("TerminalVelocity restart ü {}", std::process::id()));
     std::fs::create_dir(&root)?;
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
-        let mut workspace = Workspace::default();
-        workspace.tabs = vec![Tab {
-            name: "test".into(),
-            root: Node::Split {
-                axis: Axis::Columns,
-                ratio: 0.5,
-                first: Box::new(Node::Pane(Pane {
-                    remote: None,
-                    id: 1,
-                    shell: Shell::PowerShell,
-                    directory: base.clone(),
-                })),
-                second: Box::new(Node::Pane(Pane {
-                    remote: None,
-                    id: 2,
-                    shell: Shell::Cmd,
-                    directory: base.clone(),
-                })),
-            },
-        }];
+        let workspace = Workspace {
+            tabs: vec![Tab {
+                name: "test".into(),
+                root: Node::Split {
+                    axis: Axis::Columns,
+                    ratio: 0.5,
+                    first: Box::new(Node::Pane(Pane {
+                        remote: None,
+                        id: 1,
+                        shell: Shell::PowerShell,
+                        directory: base.clone(),
+                    })),
+                    second: Box::new(Node::Pane(Pane {
+                        remote: None,
+                        id: 2,
+                        shell: Shell::Cmd,
+                        directory: base.clone(),
+                    })),
+                },
+            }],
+            ..Workspace::default()
+        };
         let (sender, receiver) = mpsc::channel();
         let mut app = TerminalApp {
             editor: editor::Editor::default(),
