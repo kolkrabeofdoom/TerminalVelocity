@@ -155,6 +155,7 @@ struct TerminalApp {
     settings: bool,
     help: bool,
     about: bool,
+    about_banner: Option<egui::TextureHandle>,
     directory: String,
     status: String,
     storage: PathBuf,
@@ -230,6 +231,7 @@ impl TerminalApp {
             settings: false,
             help: false,
             about: false,
+            about_banner: None,
             directory,
             status: load_status,
             storage,
@@ -1164,12 +1166,38 @@ impl TerminalApp {
         if !self.about {
             return;
         }
+        if self.about_banner.is_none() {
+            if let Ok(decoded) = image::load_from_memory(include_bytes!("../assets/banner.jpg")) {
+                let rgba = decoded.to_rgba8();
+                let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                    [rgba.width() as usize, rgba.height() as usize],
+                    rgba.as_raw(),
+                );
+                self.about_banner = Some(ctx.load_texture(
+                    "about-banner",
+                    color_image,
+                    egui::TextureOptions::LINEAR,
+                ));
+            }
+        }
         let mut open = self.about;
         egui::Window::new("Über TerminalVelocity")
             .open(&mut open)
             .default_width(640.0)
-            .max_height(540.0)
+            .max_height(580.0)
             .show(ctx, |ui| {
+                if let Some(banner) = &self.about_banner {
+                    let size = banner.size_vec2();
+                    let width = 320.0_f32;
+                    let height = (width * size.y / size.x.max(1.0)).round();
+                    ui.vertical_centered(|ui| {
+                        ui.add(
+                            egui::Image::new((banner.id(), egui::vec2(width, height)))
+                                .corner_radius(6.0),
+                        );
+                    });
+                    ui.add_space(6.0);
+                }
                 ui.horizontal(|ui| {
                     ui.heading("TerminalVelocity");
                     ui.label(
@@ -2477,6 +2505,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             settings: false,
             help: false,
             about: false,
+            about_banner: None,
             directory: base.display().to_string(),
             status: String::new(),
             storage: base.join("unused-restart-test.json"),
@@ -2815,6 +2844,7 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
             settings: false,
             help: false,
             about: false,
+            about_banner: None,
             directory: base.display().to_string(),
             status: String::new(),
             storage: base.join("unused-profile-test.json"),
