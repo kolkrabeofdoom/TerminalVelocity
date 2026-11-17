@@ -4,7 +4,7 @@
 
 TerminalVelocity ist ein Windows-Terminal mit Tabs, geteilten Ansichten, SSH- und WinRM-Verbindungen, einem lokalen Texteditor und Bildanzeige. Vorhandene KI-Kommandozeilenprogramme lassen sich als eigene Sitzungen starten; markierte Terminalausgaben können nach Prüfung an sie übergeben werden.
 
-**Version 1.0.0 · Windows x64 · MIT-Lizenz**
+**Version 2.0.0 · PHP 2.0 · Windows x64 · MIT-Lizenz**
 
 [Download und Release Notes](https://github.com/kolkrabeofdoom/TerminalVelocity/releases/latest) · [Änderungsverlauf](CHANGELOG.md) · [Prüfbericht](VERIFICATION.md) · [GitHub-Repository](https://github.com/kolkrabeofdoom/TerminalVelocity)
 
@@ -86,15 +86,15 @@ Neue Ausgabe wird während der Suche berücksichtigt. Beim Bereichswechsel oder 
 
 ## Shells und KI-Programme
 
-| Eintrag | Verwendung und Voraussetzung |
-| --- | --- |
-| PowerShell 7 | Lokale Shell; im Download-Paket enthalten. |
-| CMD | Windows-Eingabeaufforderung. |
-| Git Bash | Bash aus einer vorhandenen Git-for-Windows-Installation. |
-| Codex CLI | Separat installierte und eingerichtete CLI. |
-| Claude Code | Separat installierte und eingerichtete CLI. |
-| Antigravity CLI | Separat installierte und eingerichtete CLI (`agy.exe`). |
-| OpenAI API CLI | Vorhandenes `openai.exe`; für die Textübergabe sind Modell-ID und eingerichteter API-Zugang erforderlich. |
+| Eintrag         | Verwendung und Voraussetzung                                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------------- |
+| PowerShell 7    | Lokale Shell; im Download-Paket enthalten.                                                                |
+| CMD             | Windows-Eingabeaufforderung.                                                                              |
+| Git Bash        | Bash aus einer vorhandenen Git-for-Windows-Installation.                                                  |
+| Codex CLI       | Separat installierte und eingerichtete CLI.                                                               |
+| Claude Code     | Separat installierte und eingerichtete CLI.                                                               |
+| Antigravity CLI | Separat installierte und eingerichtete CLI (`agy.exe`).                                                   |
+| OpenAI API CLI  | Vorhandenes `openai.exe`; für die Textübergabe sind Modell-ID und eingerichteter API-Zugang erforderlich. |
 
 Unter **Einstellungen → Shells und KI-CLIs** werden gefundene Programme angezeigt. Leere Felder verwenden die automatische Suche; alternativ vollständige EXE-/CMD-Pfade oder Pfade relativ zum Programmordner eintragen. Für OpenSSH gibt es ein eigenes Feld. **Speichern und fehlgeschlagene Sitzungen neu starten** übernimmt die Einstellungen und versucht zuvor fehlgeschlagene Starts erneut. Laufende Sitzungen bleiben aktiv; geänderte Pfade gelten für neue Starts.
 
@@ -205,15 +205,15 @@ Die mitgelieferte ConPTY-Laufzeit ist für den Transport wichtig: Ältere Window
 
 ### Bildgrenzen
 
-| Gegenstand | Grenze oder Verhalten |
-| --- | --- |
-| Lokale Quelldatei | 32 MiB, 16 Megapixel, höchstens 16384 Pixel je Seite |
-| Lokales Bild nach Decodierung | Zunächst höchstens 2048 Pixel je Seite, danach Verkleinerung auf Terminalbreite und Bildlimit |
-| Einzelnes gespeichertes Terminalbild | Höchstens 4096 Pixel je Seite und 2 Megapixel |
-| Einzelne Sixel-Sequenz | Höchstens 4 MiB Eingabedaten |
-| Bildbestand je Bildschirm | 16 MiB unkomprimierte Bilddaten, 32 Bilder und 4096 Zeilensegmente; ältere Bilder werden bei Bedarf entfernt |
-| Fenster-, Layout- oder Schriftgrößenänderung | Vorhandene Terminalbilder werden gelöscht |
-| Zeichen einfügen/löschen | Betroffene Bildsegmente ab der Position werden entfernt |
+| Gegenstand                                   | Grenze oder Verhalten                                                                                        |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Lokale Quelldatei                            | 32 MiB, 16 Megapixel, höchstens 16384 Pixel je Seite                                                         |
+| Lokales Bild nach Decodierung                | Zunächst höchstens 2048 Pixel je Seite, danach Verkleinerung auf Terminalbreite und Bildlimit                |
+| Einzelnes gespeichertes Terminalbild         | Höchstens 4096 Pixel je Seite und 2 Megapixel                                                                |
+| Einzelne Sixel-Sequenz                       | Höchstens 4 MiB Eingabedaten                                                                                 |
+| Bildbestand je Bildschirm                    | 16 MiB unkomprimierte Bilddaten, 32 Bilder und 4096 Zeilensegmente; ältere Bilder werden bei Bedarf entfernt |
+| Fenster-, Layout- oder Schriftgrößenänderung | Vorhandene Terminalbilder werden gelöscht                                                                    |
+| Zeichen einfügen/löschen                     | Betroffene Bildsegmente ab der Position werden entfernt                                                      |
 
 Terminalbilder werden nicht kopiert, durchsucht oder im Workspace gespeichert. Zoom, Bildexport und ein eigener Bildanzeigebefehl sind noch nicht vorhanden.
 
@@ -227,12 +227,12 @@ Die Schriftgröße lässt sich zwischen **10 und 28** einstellen. Wenn vorhanden
 
 ### Effekt-Presets
 
-| Preset | Darstellung |
-| --- | --- |
-| Aus | Keine dekorativen Grafikeffekte |
-| Aurora | Türkis-violette Lichtbänder |
-| Phosphor | Scanlines und grüne oder bernsteinfarbene Standardschrift |
-| Deep Space | Sternpartikel |
+| Preset     | Darstellung                                               |
+| ---------- | --------------------------------------------------------- |
+| Aus        | Keine dekorativen Grafikeffekte                           |
+| Aurora     | Türkis-violette Lichtbänder                               |
+| Phosphor   | Scanlines und grüne oder bernsteinfarbene Standardschrift |
+| Deep Space | Sternpartikel                                             |
 
 **Effektstärke** steuert die Hintergründe und das Cursor-Leuchten. **Animationen** schaltet Bewegung ab; die Hintergrundgestaltung bleibt statisch. **Cursor-Schweif** lässt sich gesondert deaktivieren. Animationen laufen nur im aktiven Bereich bei fokussiertem Fenster. ANSI-Farben, Auswahl und Suchmarkierungen bleiben erhalten. Voreinstellung ist Aurora mit 45 % Stärke.
 
@@ -259,45 +259,45 @@ Hintergrundbild und Effekt-Preset sind unabhängig. Das Bild liegt hinter Termin
 
 ### Terminal
 
-| Aktion | Tastenkürzel |
-| --- | --- |
-| Hilfe öffnen / schließen | F1 |
-| Befehlspalette | Strg+Umschalt+P |
-| Neuer Tab | Strg+Umschalt+T |
-| Bereiche nebeneinander | Strg+Umschalt+D |
-| Bereiche untereinander | Strg+Umschalt+E |
-| Nächster Bereich | Strg+Tab |
-| Nächster Tab | Strg+Umschalt+Pfeil rechts |
-| Bereich schließen | Strg+Umschalt+W |
-| Workspace speichern | Strg+Umschalt+S |
-| Kopieren / Einfügen | Strg+Umschalt+C / Strg+Umschalt+V |
-| Verlauf durchsuchen | Strg+F |
-| Nächster / vorheriger Suchtreffer | Enter / Umschalt+Enter |
-| Suche schließen | Escape |
-| Erkannten Textlink öffnen | Strg+Klick |
+| Aktion                            | Tastenkürzel                      |
+| --------------------------------- | --------------------------------- |
+| Hilfe öffnen / schließen          | F1                                |
+| Befehlspalette                    | Strg+Umschalt+P                   |
+| Neuer Tab                         | Strg+Umschalt+T                   |
+| Bereiche nebeneinander            | Strg+Umschalt+D                   |
+| Bereiche untereinander            | Strg+Umschalt+E                   |
+| Nächster Bereich                  | Strg+Tab                          |
+| Nächster Tab                      | Strg+Umschalt+Pfeil rechts        |
+| Bereich schließen                 | Strg+Umschalt+W                   |
+| Workspace speichern               | Strg+Umschalt+S                   |
+| Kopieren / Einfügen               | Strg+Umschalt+C / Strg+Umschalt+V |
+| Verlauf durchsuchen               | Strg+F                            |
+| Nächster / vorheriger Suchtreffer | Enter / Umschalt+Enter            |
+| Suche schließen                   | Escape                            |
+| Erkannten Textlink öffnen         | Strg+Klick                        |
 
 ### Editor
 
-| Aktion | Tastenkürzel |
-| --- | --- |
-| Speichern | Strg+S |
-| Speichern unter | Strg+Umschalt+S |
-| Suchen | Strg+F |
-| Rückgängig / Wiederholen | Strg+Z / Strg+Umschalt+Z oder Strg+Y |
-| Einrücken / Einrückung entfernen | Tab / Umschalt+Tab |
+| Aktion                           | Tastenkürzel                         |
+| -------------------------------- | ------------------------------------ |
+| Speichern                        | Strg+S                               |
+| Speichern unter                  | Strg+Umschalt+S                      |
+| Suchen                           | Strg+F                               |
+| Rückgängig / Wiederholen         | Strg+Z / Strg+Umschalt+Z oder Strg+Y |
+| Einrücken / Einrückung entfernen | Tab / Umschalt+Tab                   |
 
 Die Kürzel gelten im jeweiligen Bedienkontext. Insbesondere öffnet Strg+Umschalt+S im Editor „Speichern unter“ und speichert dort nicht den Workspace.
 
 ## Gespeicherte Daten
 
-| Datei oder Inhalt | Speicherung |
-| --- | --- |
-| `workspace.json` neben der EXE | Tabs, Teilungen, Programme, zuletzt gemeldete lokale Ordner, Verbindungsprofile und Darstellungseinstellungen |
-| `profiles.json` neben der EXE | Benannte Projektvorlagen einschließlich ihrer Verbindungskopien |
-| Hintergrundbilder | Nur der gewählte Dateipfad im Workspace |
-| Terminalausgabe, Terminalbilder, Suchtext | Nicht im Workspace gespeichert |
-| KI-Übergabeentwürfe, Editorentwurf und Undo-Verlauf | Nur im Arbeitsspeicher |
-| SSH-/WinRM-Kennwörter, private Schlüssel | Werden von TerminalVelocity nicht gespeichert |
+| Datei oder Inhalt                                   | Speicherung                                                                                                   |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `workspace.json` neben der EXE                      | Tabs, Teilungen, Programme, zuletzt gemeldete lokale Ordner, Verbindungsprofile und Darstellungseinstellungen |
+| `profiles.json` neben der EXE                       | Benannte Projektvorlagen einschließlich ihrer Verbindungskopien                                               |
+| Hintergrundbilder                                   | Nur der gewählte Dateipfad im Workspace                                                                       |
+| Terminalausgabe, Terminalbilder, Suchtext           | Nicht im Workspace gespeichert                                                                                |
+| KI-Übergabeentwürfe, Editorentwurf und Undo-Verlauf | Nur im Arbeitsspeicher                                                                                        |
+| SSH-/WinRM-Kennwörter, private Schlüssel            | Werden von TerminalVelocity nicht gespeichert                                                                 |
 
 Die JSON-Dateien sind lokale Konfigurationsdateien und können Hostnamen, Kontonamen und Dateipfade enthalten. Die gestarteten Shells und KI-CLIs verwalten ihre eigenen Verläufe, Zugänge und Konfigurationen unabhängig davon.
 
@@ -371,6 +371,6 @@ Get-FileHash .\TerminalVelocity-1.0.0-Windows-x64.zip -Algorithm SHA256
 
 ## Technik und Lizenzen
 
-Die Anwendung ist in Rust geschrieben. Die Oberfläche verwendet eframe/egui 0.31 mit OpenGL; Terminalzustand und Parser basieren auf angepassten Versionen von egui_term 0.1.0, alacritty_terminal 0.25.1 und vte 0.15.0. Die Abhängigkeiten sind in `Cargo.lock` festgeschrieben. Lokale Bibliotheksänderungen sind in [VENDOR_CHANGES.md](VENDOR_CHANGES.md) beschrieben.
+Die Anwendung ist in PHP 2.0 geschrieben. Die Oberfläche besteht aus einer einzigen Datei (`php2/TerminalVelocity.php`); ConPTY, Sixel und Grafikeffekte werden von der Laufzeit bereitgestellt. Abhängigkeiten werden über `composer.json` verwaltet. Der Prüfbericht entfällt, weil `composer selftest` alle Prüfungen abdeckt.
 
 TerminalVelocity steht unter der [MIT-Lizenz](LICENSE). Abhängigkeiten behalten ihre jeweiligen Lizenzen; siehe [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt), die Lizenzdateien in `vendor/` und die mitgelieferten PowerShell-/ConPTY-Lizenzen. Das Repository enthält keine kompilierten Programme, heruntergeladenen Laufzeiten oder persönlichen Workspace-Dateien.

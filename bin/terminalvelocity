@@ -1,0 +1,22 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/../php2/TerminalVelocity.php';
+require __DIR__ . '/../php2/TerminalBuffer.php';
+require __DIR__ . '/../php2/AnsiParser.php';
+require __DIR__ . '/../php2/SixelDecoder.php';
+require __DIR__ . '/../php2/Pane.php';
+require __DIR__ . '/../php2/Session.php';
+require __DIR__ . '/../php2/Editor.php';
+require __DIR__ . '/../php2/Config.php';
+require __DIR__ . '/../php2/Renderer.php';
+require __DIR__ . '/../php2/Search.php';
+require __DIR__ . '/../php2/CommandPalette.php';
+require __DIR__ . '/../php2/App.php';
+
+use TerminalVelocity\TerminalVelocity;
+
+$application = new TerminalVelocity(getcwd() ?: '.');
+exit($application->run());

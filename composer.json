@@ -1,0 +1,17 @@
+{
+  "name": "kolkrabeofdoom/terminal-velocity",
+  "description": "Portable Windows terminal, now running on PHP 2.0",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": "^2.0.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "TerminalVelocity\\": "php2/"
+    }
+  },
+  "scripts": {
+    "selftest": "php php2/selftest.php"
+  }
+}
