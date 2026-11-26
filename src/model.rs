@@ -157,6 +157,9 @@ pub fn ps_literal(value: &str) -> String {
 
 /// Prefix of the directory report that the shell integration sends as window title.
 pub const CWD_MARKER: &str = "TERMINALVELOCITY_CWD:";
+/// Variant whose path is UTF-8 encoded as hex. PowerShell writes through the console
+/// code page, which would replace characters such as `’` or `ł`; hex is plain ASCII.
+pub const CWD_HEX_MARKER: &str = "TERMINALVELOCITY_CWDX:";
 /// Environment variable that hands the session key to the Git Bash rc file.
 pub const CWD_TOKEN_ENV: &str = "TERMINALVELOCITY_CWD_TOKEN";
 
@@ -184,14 +187,35 @@ pub fn new_cwd_token() -> String {
 }
 
 /// Extract the reported directory if the title carries this session's key.
-fn reported_directory<'a>(title: &'a str, token: &str) -> Option<&'a str> {
+pub fn reported_directory(title: &str, token: &str) -> Option<String> {
     if token.len() < 32 {
         return None;
     }
-    title
-        .strip_prefix(CWD_MARKER)?
-        .strip_prefix(token)?
-        .strip_prefix(':')
+    let keyed = |marker: &str| {
+        title
+            .strip_prefix(marker)?
+            .strip_prefix(token)?
+            .strip_prefix(':')
+    };
+    if let Some(path) = keyed(CWD_MARKER) {
+        return Some(path.to_string());
+    }
+    decode_hex_utf8(keyed(CWD_HEX_MARKER)?)
+}
+
+/// Decode upper- or lower-case hex into UTF-8 text; anything malformed is rejected.
+fn decode_hex_utf8(hex: &str) -> Option<String> {
+    // Windows paths are limited to 32,767 UTF-16 units, at most 3 UTF-8 bytes each.
+    if hex.is_empty() || hex.len() % 2 != 0 || hex.len() > 6 * 32_767 {
+        return None;
+    }
+    let digit = |b: u8| (b as char).to_digit(16).map(|d| d as u8);
+    let bytes = hex
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| Some((digit(pair[0])? << 4) | digit(pair[1])?))
+        .collect::<Option<Vec<u8>>>()?;
+    String::from_utf8(bytes).ok()
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -399,7 +423,7 @@ impl Shell {
                     ps_literal(&agy.to_string_lossy())
                 ));
             }
-            script.push_str(&format!(" $global:TerminalVelocitySavedPrompt = $function:prompt; function global:prompt {{ if ($PWD.Provider.Name -eq 'FileSystem') {{ [Console]::Write(([char]27).ToString() + ']0;{CWD_MARKER}{cwd_token}:' + $PWD.ProviderPath + [char]7) }}; if ($global:TerminalVelocitySavedPrompt) {{ & $global:TerminalVelocitySavedPrompt }} else {{ 'PS ' + $PWD.Path + '> ' }} }};"));
+            script.push_str(&format!(" $global:TerminalVelocitySavedPrompt = $function:prompt; function global:prompt {{ if ($PWD.Provider.Name -eq 'FileSystem') {{ [Console]::Write(([char]27).ToString() + ']0;{CWD_HEX_MARKER}{cwd_token}:' + [BitConverter]::ToString([Text.Encoding]::UTF8.GetBytes($PWD.ProviderPath)).Replace('-', '') + [char]7) }}; if ($global:TerminalVelocitySavedPrompt) {{ & $global:TerminalVelocitySavedPrompt }} else {{ 'PS ' + $PWD.Path + '> ' }} }};"));
             return Ok((
                 executable,
                 vec![
@@ -1087,7 +1111,9 @@ mod tests {
         let (_, args) = Shell::PowerShell
             .launch(PathBuf::from("pwsh.exe"), &base, false, &token)
             .unwrap();
-        assert!(args[3].contains(&marker));
+        // PowerShell reports the path hex-encoded to survive the console code page.
+        assert!(args[3].contains(&format!("{CWD_HEX_MARKER}{token}:")));
+        assert!(args[3].contains("[Text.Encoding]::UTF8.GetBytes($PWD.ProviderPath)"));
         let (_, args) = Shell::Cmd
             .launch(PathBuf::from("cmd.exe"), &base, false, &token)
             .unwrap();
@@ -1122,6 +1148,39 @@ mod tests {
         if let Some(command) = args.last() {
             assert!(command
                 .ends_with("& 'C:/Users/D\u{2019}\u{2019}Angelo/AppData/Roaming/npm/claude.cmd'"));
+        }
+    }
+    #[test]
+    fn hex_reports_keep_characters_outside_the_console_code_page() {
+        let token = new_cwd_token();
+        let path = "C:\\Temp\\D\u{2019}Angelo \u{142}\u{f6}d\u{17a} \u{1F980}";
+        let hex: String = path.bytes().map(|b| format!("{b:02X}")).collect();
+        assert_eq!(
+            reported_directory(&format!("{CWD_HEX_MARKER}{token}:{hex}"), &token).as_deref(),
+            Some(path)
+        );
+        let lower = hex.to_lowercase();
+        assert_eq!(
+            reported_directory(&format!("{CWD_HEX_MARKER}{token}:{lower}"), &token).as_deref(),
+            Some(path)
+        );
+        // Plain reports from CMD and Git Bash keep working.
+        assert_eq!(
+            reported_directory(&format!("{CWD_MARKER}{token}:{path}"), &token).as_deref(),
+            Some(path)
+        );
+        let other = new_cwd_token();
+        for forged in [
+            format!("{CWD_HEX_MARKER}{other}:{hex}"),
+            format!("{CWD_HEX_MARKER}{hex}"),
+            format!("{CWD_HEX_MARKER}{token}:{}", &hex[1..]),
+            format!("{CWD_HEX_MARKER}{token}:"),
+            format!("{CWD_HEX_MARKER}{token}:ZZ"),
+            format!("{CWD_HEX_MARKER}{token}:+1"),
+            format!("{CWD_HEX_MARKER}{token}:FF"),
+            format!("{CWD_HEX_MARKER}{token}:{}", "41".repeat(3 * 32_767 + 1)),
+        ] {
+            assert_eq!(reported_directory(&forged, &token), None, "{forged:.80}");
         }
     }
 }
