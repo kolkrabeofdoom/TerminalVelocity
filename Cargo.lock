@@ -2085,7 +2085,7 @@ dependencies = [
 
 [[package]]
 name = "terminalvelocity"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "alacritty_terminal",
  "eframe",
