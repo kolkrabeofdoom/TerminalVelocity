@@ -136,6 +136,45 @@ impl WorkspaceGuard {
     }
 }
 
+/// Prefix of the directory report that the shell integration sends as window title.
+pub const CWD_MARKER: &str = "TERMINALVELOCITY_CWD:";
+/// Environment variable that hands the session key to the Git Bash rc file.
+pub const CWD_TOKEN_ENV: &str = "TERMINALVELOCITY_CWD_TOKEN";
+
+/// Random per-session key for directory reports (128 bit, hex).
+///
+/// Output from programs, files or remote hosts cannot know it, so only the shell
+/// integration started by TerminalVelocity can move a pane's working directory.
+/// `RandomState` is seeded from the operating system's random source; SipHash with
+/// that secret key is unpredictable without needing an extra dependency.
+pub fn new_cwd_token() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let part = || {
+        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+        hasher.write_u64(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+        hasher.write_u128(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0),
+        );
+        hasher.finish()
+    };
+    format!("{:016x}{:016x}", part(), part())
+}
+
+/// Extract the reported directory if the title carries this session's key.
+fn reported_directory<'a>(title: &'a str, token: &str) -> Option<&'a str> {
+    if token.len() < 32 {
+        return None;
+    }
+    title
+        .strip_prefix(CWD_MARKER)?
+        .strip_prefix(token)?
+        .strip_prefix(':')
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(clippy::enum_variant_names)]
 pub enum Shell {
@@ -307,12 +346,26 @@ impl Shell {
             _ => vec![],
         }
     }
+    /// Extra environment for a local shell session. Only Git Bash needs the key this
+    /// way; its rc file moves it into a shell variable and removes it from the environment.
+    pub fn session_env(self, cwd_token: &str) -> std::collections::HashMap<String, String> {
+        let mut env = std::collections::HashMap::new();
+        if self == Self::GitBash {
+            env.insert(CWD_TOKEN_ENV.to_string(), cwd_token.to_string());
+        }
+        env
+    }
     pub fn launch(
         &self,
         executable: PathBuf,
         app_dir: &std::path::Path,
         version_only: bool,
+        cwd_token: &str,
     ) -> Result<(PathBuf, Vec<String>), String> {
+        // The key is hex only, so it is safe inside PowerShell and CMD strings.
+        if !cwd_token.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err("Ungültiger Sitzungsschlüssel".into());
+        }
         if *self == Self::PowerShell {
             let mut script = "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path;".to_string();
             if let Some(codex) = Self::Codex.resolve(None, app_dir) {
@@ -327,7 +380,7 @@ impl Shell {
                     agy.to_string_lossy().replace('\'', "''")
                 ));
             }
-            script.push_str(" $global:TerminalVelocitySavedPrompt = $function:prompt; function global:prompt { if ($PWD.Provider.Name -eq 'FileSystem') { [Console]::Write(([char]27).ToString() + ']0;TERMINALVELOCITY_CWD:' + $PWD.ProviderPath + [char]7) }; if ($global:TerminalVelocitySavedPrompt) { & $global:TerminalVelocitySavedPrompt } else { 'PS ' + $PWD.Path + '> ' } };");
+            script.push_str(&format!(" $global:TerminalVelocitySavedPrompt = $function:prompt; function global:prompt {{ if ($PWD.Provider.Name -eq 'FileSystem') {{ [Console]::Write(([char]27).ToString() + ']0;{CWD_MARKER}{cwd_token}:' + $PWD.ProviderPath + [char]7) }}; if ($global:TerminalVelocitySavedPrompt) {{ & $global:TerminalVelocitySavedPrompt }} else {{ 'PS ' + $PWD.Path + '> ' }} }};"));
             return Ok((
                 executable,
                 vec![
@@ -344,7 +397,7 @@ impl Shell {
                 vec![
                     "/D".into(),
                     "/K".into(),
-                    "prompt $E]0;TERMINALVELOCITY_CWD:$P$E\\$P$G".into(),
+                    format!("prompt $E]0;{CWD_MARKER}{cwd_token}:$P$E\\$P$G"),
                 ],
             ));
         }
@@ -534,7 +587,7 @@ impl Default for Workspace {
 }
 
 impl Workspace {
-    pub fn update_directory(&mut self, id: u64, title: &str) -> bool {
+    pub fn update_directory(&mut self, id: u64, title: &str, cwd_token: &str) -> bool {
         let Some(pane) = self.tabs.iter_mut().find_map(|tab| tab.root.pane_mut(id)) else {
             return false;
         };
@@ -542,7 +595,8 @@ impl Workspace {
         if pane.remote.is_some() {
             return false;
         }
-        let Some(path) = title.strip_prefix("TERMINALVELOCITY_CWD:") else {
+        // Without the session key the report may come from any program output.
+        let Some(path) = reported_directory(title, cwd_token) else {
             return false;
         };
         let path = PathBuf::from(path);
@@ -745,12 +799,13 @@ mod tests {
                 executable.clone(),
                 std::path::Path::new("missing-host"),
                 false,
+                "",
             )
             .unwrap();
         assert_eq!(program, executable);
         assert!(args.is_empty());
         let (_, args) = Shell::Codex
-            .launch(executable, std::path::Path::new("missing-host"), true)
+            .launch(executable, std::path::Path::new("missing-host"), true, "")
             .unwrap();
         assert_eq!(args, ["--version"]);
     }
@@ -778,8 +833,9 @@ mod tests {
                 })),
             },
         });
-        assert!(workspace
-            .update_directory(12, &format!("TERMINALVELOCITY_CWD:{}", alternate.display())));
+        let token = new_cwd_token();
+        let report = |path: &str| format!("{CWD_MARKER}{token}:{path}");
+        assert!(workspace.update_directory(12, &report(&alternate.display().to_string()), &token));
         assert_eq!(
             workspace.inherited_directory(12, std::path::Path::new("fallback")),
             alternate
@@ -788,11 +844,11 @@ mod tests {
             workspace.inherited_directory(11, std::path::Path::new("fallback")),
             base
         );
-        assert!(!workspace.update_directory(12, "normal window title"));
-        assert!(!workspace.update_directory(12, "TERMINALVELOCITY_CWD:relative"));
-        assert!(!workspace.update_directory(12, r"TERMINALVELOCITY_CWD:\\198.51.100.1\share"));
-        assert!(!workspace.update_directory(12, "TERMINALVELOCITY_CWD://198.51.100.1/share"));
-        assert!(!workspace.update_directory(12, r"TERMINALVELOCITY_CWD:\\?\UNC\198.51.100.1\share"));
+        assert!(!workspace.update_directory(12, "normal window title", &token));
+        assert!(!workspace.update_directory(12, &report("relative"), &token));
+        assert!(!workspace.update_directory(12, &report(r"\\198.51.100.1\share"), &token));
+        assert!(!workspace.update_directory(12, &report("//198.51.100.1/share"), &token));
+        assert!(!workspace.update_directory(12, &report(r"\\?\UNC\198.51.100.1\share"), &token));
         assert_eq!(
             workspace.inherited_directory(99, std::path::Path::new("fallback")),
             PathBuf::from("fallback")
@@ -853,7 +909,7 @@ mod tests {
         ));
 
         let (_, args) = Shell::PowerShell
-            .launch(PathBuf::from("pwsh.exe"), &base, false)
+            .launch(PathBuf::from("pwsh.exe"), &base, false, "")
             .unwrap();
         let script = &args[3];
         let machine_pos = script.find("('Path','Machine')").unwrap();
@@ -966,5 +1022,64 @@ mod tests {
 
         assert!(backup_unloadable(&root.join("missing.json")).is_err());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn directory_reports_without_the_session_key_are_ignored() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let target = base.join("src");
+        let mut workspace = Workspace::default();
+        workspace.tabs.push(Tab {
+            name: "local".into(),
+            root: Node::Pane(Pane {
+                remote: None,
+                id: 1,
+                shell: Shell::Cmd,
+                directory: base.clone(),
+            }),
+        });
+        let token = new_cwd_token();
+        let other = new_cwd_token();
+        assert_eq!(token.len(), 32);
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(token, other, "every session gets its own key");
+        let path = target.display().to_string();
+        // Output such as `type README.txt` or a remote host only knows the old format.
+        for forged in [
+            format!("{CWD_MARKER}{path}"),
+            format!("{CWD_MARKER}{other}:{path}"),
+            format!("{CWD_MARKER}{}:{path}", &token[..31]),
+            format!("{CWD_MARKER}{token}{path}"),
+            format!("{CWD_MARKER}:{path}"),
+        ] {
+            assert!(!workspace.update_directory(1, &forged, &token), "{forged}");
+        }
+        // An empty or short key must never match, e.g. the "--version" launches.
+        assert!(!workspace.update_directory(1, &format!("{CWD_MARKER}:{path}"), ""));
+        assert_eq!(workspace.inherited_directory(1, &base), base);
+        assert!(workspace.update_directory(1, &format!("{CWD_MARKER}{token}:{path}"), &token));
+        assert_eq!(workspace.inherited_directory(1, &base), target);
+    }
+    #[test]
+    fn shell_integrations_carry_the_session_key() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let token = new_cwd_token();
+        let marker = format!("{CWD_MARKER}{token}:");
+        let (_, args) = Shell::PowerShell
+            .launch(PathBuf::from("pwsh.exe"), &base, false, &token)
+            .unwrap();
+        assert!(args[3].contains(&marker));
+        let (_, args) = Shell::Cmd
+            .launch(PathBuf::from("cmd.exe"), &base, false, &token)
+            .unwrap();
+        assert_eq!(args[2], format!("prompt $E]0;{marker}$P$E\\$P$G"));
+        assert_eq!(
+            Shell::GitBash.session_env(&token).get(CWD_TOKEN_ENV),
+            Some(&token)
+        );
+        assert!(Shell::PowerShell.session_env(&token).is_empty());
+        assert!(Shell::Cmd
+            .launch(PathBuf::from("cmd.exe"), &base, false, "x'; calc")
+            .is_err());
     }
 }

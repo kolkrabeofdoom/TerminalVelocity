@@ -51,3 +51,7 @@ egui_term stellt die logische Textzeile unter einer Pixelposition samt UTF-8-Byt
 
 - `vendor/egui_term-0.1.0`: `url_regex` und `open_link` sind über `is_safe_http_url` auf wohlgeformte `http://`- und `https://`-Links beschränkt; `file://`- und Fremdprotokoll-Schemata sowie der Panic bei fehlgeschlagenem `open::that`-Aufruf wurden entfernt. `encode_paste` respektiert `TermMode::BRACKETED_PASTE` (`\x1b[200~` … `\x1b[201~`) und entfernt `ESC`-/`CSI`-/`NUL`-Steuerbytes im eingefügten Text (Pastejacking-Schutz). `TerminalBackend::new` weist Programmpfade mit inneren Anführungszeichen oder Steuerzeichen ab. Explizite `f32`-Literale in `src/effects.rs` beseitigen zukünftige Compilerwarnungen.
 - `vendor/alacritty_terminal-0.25.1`: `conpty.rs` gibt Fehler bei `CreatePseudoConsole` als `io::Error` zurück und protokolliert `ResizePseudoConsole`-Fehler über `warn!`, statt per `assert_eq!` abzubrechen.
+
+## 1.0.1: Umgebungsvariablen für Sitzungen
+
+- `vendor/egui_term-0.1.0`: `BackendSettings` hat ein Feld `env`, das unverändert an `alacritty_terminal::tty::Options::env` (ConPTY-Umgebungsblock) weitergereicht wird. TerminalVelocity übergibt darüber den Sitzungsschlüssel für die Ordnermeldung an Git Bash. Kein Einfluss auf PTY-Protokoll oder Eingabeformat.
