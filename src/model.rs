@@ -72,6 +72,70 @@ pub fn atomic_write_json(path: &Path, bytes: &[u8]) -> Result<(), String> {
     result
 }
 
+/// Copy an unreadable configuration file next to itself before anything may overwrite it.
+/// Uses `create_new(true)`, so an earlier backup is never replaced.
+pub fn backup_unloadable(path: &Path) -> Result<PathBuf, String> {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("workspace.json");
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mut source = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    for attempt in 0..100u32 {
+        let suffix = if attempt == 0 {
+            String::new()
+        } else {
+            format!("-{attempt}")
+        };
+        let backup = path.with_file_name(format!("{name}.broken-{stamp}{suffix}"));
+        let mut target = match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&backup)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        };
+        let copied = std::io::copy(&mut source, &mut target).and_then(|_| target.sync_all());
+        if let Err(error) = copied {
+            drop(target);
+            let _ = std::fs::remove_file(&backup);
+            return Err(error.to_string());
+        }
+        return Ok(backup);
+    }
+    Err("Kein freier Name für die Sicherungskopie gefunden.".into())
+}
+
+/// Set when `workspace.json` existed but could not be loaded.
+pub struct WorkspaceGuard {
+    pub reason: String,
+    pub backup: Option<PathBuf>,
+}
+
+impl WorkspaceGuard {
+    /// Automatic saves never replace an unloaded file. An explicit save may, but only
+    /// once a backup of the original exists.
+    pub fn check(&self, explicit: bool) -> Result<(), String> {
+        match (&self.backup, explicit) {
+            (Some(_), true) => Ok(()),
+            (Some(backup), false) => Err(format!(
+                "Nicht gespeichert: workspace.json konnte nicht geladen werden ({}). Eine Kopie liegt unter {}. Mit „Workspace speichern“ wird die Datei bewusst ersetzt.",
+                self.reason,
+                backup.display()
+            )),
+            (None, _) => Err(format!(
+                "Nicht gespeichert: workspace.json konnte nicht geladen und nicht gesichert werden ({}). Bitte die Datei prüfen oder beiseitelegen und TerminalVelocity neu starten.",
+                self.reason
+            )),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(clippy::enum_variant_names)]
 pub enum Shell {
@@ -869,5 +933,38 @@ mod tests {
             },
         });
         assert!(state.validate().is_err());
+    }
+
+    #[test]
+    fn unloadable_workspace_is_backed_up_and_never_silently_replaced() {
+        let root = std::env::temp_dir().join(format!("tv-guard-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("workspace.json");
+        let original = b"{ \"version\": 99, \"connections\": [] ".to_vec();
+        std::fs::write(&path, &original).unwrap();
+        assert!(Workspace::load(&path).is_err());
+
+        let first = backup_unloadable(&path).unwrap();
+        let second = backup_unloadable(&path).unwrap();
+        assert_ne!(first, second, "an existing backup must not be replaced");
+        assert_eq!(std::fs::read(&first).unwrap(), original);
+        assert_eq!(std::fs::read(&second).unwrap(), original);
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+
+        let guarded = WorkspaceGuard {
+            reason: "kaputt".into(),
+            backup: Some(first),
+        };
+        assert!(guarded.check(false).is_err());
+        assert!(guarded.check(true).is_ok());
+        let unprotected = WorkspaceGuard {
+            reason: "kaputt".into(),
+            backup: None,
+        };
+        assert!(unprotected.check(false).is_err());
+        assert!(unprotected.check(true).is_err());
+
+        assert!(backup_unloadable(&root.join("missing.json")).is_err());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
