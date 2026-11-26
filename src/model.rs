@@ -136,6 +136,25 @@ impl WorkspaceGuard {
     }
 }
 
+/// Quote a value as a PowerShell single-quoted string literal.
+///
+/// PowerShell treats the typographic quotes U+2018, U+2019, U+201A and U+201B
+/// exactly like `'`, so all of them must be doubled. Escaping only the ASCII
+/// apostrophe breaks paths such as `C:\Users\D’Angelo` and lets such a quote
+/// end the string early.
+pub fn ps_literal(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('\'');
+    for c in value.chars() {
+        if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+            quoted.push(c);
+        }
+        quoted.push(c);
+    }
+    quoted.push('\'');
+    quoted
+}
+
 /// Prefix of the directory report that the shell integration sends as window title.
 pub const CWD_MARKER: &str = "TERMINALVELOCITY_CWD:";
 /// Environment variable that hands the session key to the Git Bash rc file.
@@ -370,14 +389,14 @@ impl Shell {
             let mut script = "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path;".to_string();
             if let Some(codex) = Self::Codex.resolve(None, app_dir) {
                 script.push_str(&format!(
-                    " Set-Alias -Name codex -Value '{}' -Scope Global;",
-                    codex.to_string_lossy().replace('\'', "''")
+                    " Set-Alias -Name codex -Value {} -Scope Global;",
+                    ps_literal(&codex.to_string_lossy())
                 ));
             }
             if let Some(agy) = Self::Antigravity.resolve(None, app_dir) {
                 script.push_str(&format!(
-                    " Set-Alias -Name agy -Value '{}' -Scope Global;",
-                    agy.to_string_lossy().replace('\'', "''")
+                    " Set-Alias -Name agy -Value {} -Scope Global;",
+                    ps_literal(&agy.to_string_lossy())
                 ));
             }
             script.push_str(&format!(" $global:TerminalVelocitySavedPrompt = $function:prompt; function global:prompt {{ if ($PWD.Provider.Name -eq 'FileSystem') {{ [Console]::Write(([char]27).ToString() + ']0;{CWD_MARKER}{cwd_token}:' + $PWD.ProviderPath + [char]7) }}; if ($global:TerminalVelocitySavedPrompt) {{ & $global:TerminalVelocitySavedPrompt }} else {{ 'PS ' + $PWD.Path + '> ' }} }};"));
@@ -434,7 +453,7 @@ impl Shell {
         let host = Self::PowerShell
             .resolve(None, app_dir)
             .ok_or_else(|| "PowerShell 7 als Host für KI-CLIs nicht gefunden".to_string())?;
-        let path = executable.to_string_lossy().replace('\'', "''");
+        let path = ps_literal(&executable.to_string_lossy());
         let option = if version_only {
             " --version"
         } else if *self == Self::OpenAI {
@@ -442,7 +461,7 @@ impl Shell {
         } else {
             ""
         };
-        let command = format!("$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path; & '{path}'{option}");
+        let command = format!("$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path; & {path}{option}");
         let mut args = vec!["-NoLogo".into(), "-NoProfile".into()];
         if !version_only {
             args.push("-NoExit".into());
@@ -1081,5 +1100,28 @@ mod tests {
         assert!(Shell::Cmd
             .launch(PathBuf::from("cmd.exe"), &base, false, "x'; calc")
             .is_err());
+    }
+    #[test]
+    fn powershell_literals_double_every_kind_of_single_quote() {
+        assert_eq!(ps_literal("C:/tools/codex.exe"), "'C:/tools/codex.exe'");
+        assert_eq!(ps_literal("O'Brien"), "'O''Brien'");
+        assert_eq!(
+            ps_literal("D\u{2018}a\u{2019}b\u{201A}c\u{201B}d"),
+            "'D\u{2018}\u{2018}a\u{2019}\u{2019}b\u{201A}\u{201A}c\u{201B}\u{201B}d'"
+        );
+        // Double quotes and $ are literal inside single quotes and stay unchanged.
+        assert_eq!(ps_literal("\"$(calc)\""), "'\"$(calc)\"'");
+        let (_, args) = Shell::Claude
+            .launch(
+                PathBuf::from("C:/Users/D\u{2019}Angelo/AppData/Roaming/npm/claude.cmd"),
+                std::path::Path::new("missing-host"),
+                false,
+                "",
+            )
+            .unwrap_or_default();
+        if let Some(command) = args.last() {
+            assert!(command
+                .ends_with("& 'C:/Users/D\u{2019}\u{2019}Angelo/AppData/Roaming/npm/claude.cmd'"));
+        }
     }
 }

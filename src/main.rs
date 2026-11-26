@@ -2379,7 +2379,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
     }
     let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
     let test_root = std::env::temp_dir().join(format!(
-        "TerminalVelocity cwd O'Brien ü {}",
+        "TerminalVelocity cwd O'Brien D\u{2019}Angelo ü {}",
         std::process::id()
     ));
     std::fs::create_dir(&test_root)?;
@@ -2407,8 +2407,8 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
             wait_for_directory(&mut backend, &receiver, &base, &token)?;
             let command = match shell {
                 Shell::PowerShell => format!(
-                    "Set-Location -LiteralPath '{}'\r",
-                    test_root.to_string_lossy().replace('\'', "''")
+                    "Set-Location -LiteralPath {}\r",
+                    model::ps_literal(&test_root.to_string_lossy())
                 ),
                 Shell::Cmd => format!("cd /d \"{}\"\r", test_root.display()),
                 _ => format!(
@@ -2457,7 +2457,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                 },
             )?;
             wait_for_directory(&mut next, &next_receiver, &test_root, &next_token)?;
-            report.push(format!("{}: cd erkannt; neuer Bereich im übernommenen Ordner gestartet (Leerzeichen, Apostroph, Unicode)", shell.label()));
+            report.push(format!("{}: cd erkannt; neuer Bereich im übernommenen Ordner gestartet (Leerzeichen, Apostroph, typografischer Apostroph, Unicode)", shell.label()));
         }
         Ok(report)
     })();
@@ -2599,8 +2599,8 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
         send(
             &mut app,
             &format!(
-                "Set-Location -LiteralPath '{}'\r",
-                root.to_string_lossy().replace('\'', "''")
+                "Set-Location -LiteralPath {}\r",
+                model::ps_literal(&root.to_string_lossy())
             ),
         );
         wait(&mut app, |app| {
