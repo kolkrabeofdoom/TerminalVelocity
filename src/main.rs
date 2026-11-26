@@ -2355,18 +2355,13 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
             if let Ok((_, PtyEvent::Title(title))) =
                 receiver.recv_timeout(Duration::from_millis(50))
             {
-                if title
-                    .strip_prefix(model::CWD_MARKER)
-                    .and_then(|rest| rest.strip_prefix(token))
-                    .and_then(|rest| rest.strip_prefix(':'))
-                    .is_some_and(|path| {
-                        PathBuf::from(path)
-                            .canonicalize()
-                            .ok()
-                            .zip(expected.canonicalize().ok())
-                            .is_some_and(|(actual, expected)| actual == expected)
-                    })
-                {
+                if model::reported_directory(&title, token).is_some_and(|path| {
+                    PathBuf::from(path)
+                        .canonicalize()
+                        .ok()
+                        .zip(expected.canonicalize().ok())
+                        .is_some_and(|(actual, expected)| actual == expected)
+                }) {
                     return Ok(title);
                 }
                 last_title = title;
@@ -2379,7 +2374,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
     }
     let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
     let test_root = std::env::temp_dir().join(format!(
-        "TerminalVelocity cwd O'Brien ü {}",
+        "TerminalVelocity cwd O'Brien D\u{2019}Angelo ł ü {}",
         std::process::id()
     ));
     std::fs::create_dir(&test_root)?;
@@ -2457,7 +2452,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                 },
             )?;
             wait_for_directory(&mut next, &next_receiver, &test_root, &next_token)?;
-            report.push(format!("{}: cd erkannt; neuer Bereich im übernommenen Ordner gestartet (Leerzeichen, Apostroph, Unicode)", shell.label()));
+            report.push(format!("{}: cd erkannt; neuer Bereich im übernommenen Ordner gestartet (Leerzeichen, Apostroph, typografischer Apostroph, Zeichen außerhalb der Codepage, Unicode)", shell.label()));
         }
         Ok(report)
     })();
