@@ -342,7 +342,8 @@ mod tests {
         c.https = true;
         c.port = Some(5986);
         // Replace only the networking/credential cmdlets, retaining the actual PowerShell parser.
-        let fixture = "function Get-Credential { param($UserName, $Message) return $UserName }; function Enter-PSSession { [CmdletBinding()] param($ComputerName, $Port, [switch]$UseSSL, $ConfigurationName, $Credential) @{host=$ComputerName;port=$Port;https=$UseSSL.IsPresent;endpoint=$ConfigurationName;user=$Credential} | ConvertTo-Json -Compress }; ";
+        // EscapeNonAscii keeps the JSON independent of the console code page.
+        let fixture = "function Get-Credential { param($UserName, $Message) return $UserName }; function Enter-PSSession { [CmdletBinding()] param($ComputerName, $Port, [switch]$UseSSL, $ConfigurationName, $Credential) @{host=$ComputerName;port=$Port;https=$UseSSL.IsPresent;endpoint=$ConfigurationName;user=$Credential} | ConvertTo-Json -Compress -EscapeHandling EscapeNonAscii }; ";
         let output = std::process::Command::new(pwsh)
             .args([
                 "-NoLogo",
