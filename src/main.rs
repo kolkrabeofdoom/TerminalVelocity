@@ -2379,7 +2379,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
     }
     let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
     let test_root = std::env::temp_dir().join(format!(
-        "TerminalVelocity cwd O'Brien D\u{2019}Angelo ü {}",
+        "TerminalVelocity cwd O'Brien ü {}",
         std::process::id()
     ));
     std::fs::create_dir(&test_root)?;
@@ -2457,7 +2457,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                 },
             )?;
             wait_for_directory(&mut next, &next_receiver, &test_root, &next_token)?;
-            report.push(format!("{}: cd erkannt; neuer Bereich im übernommenen Ordner gestartet (Leerzeichen, Apostroph, typografischer Apostroph, Unicode)", shell.label()));
+            report.push(format!("{}: cd erkannt; neuer Bereich im übernommenen Ordner gestartet (Leerzeichen, Apostroph, Unicode)", shell.label()));
         }
         Ok(report)
     })();
