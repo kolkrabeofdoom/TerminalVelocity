@@ -166,6 +166,7 @@ struct TerminalApp {
     profile_dialog: Option<profiles::Dialog>,
     remote_dialog: Option<remote::Dialog>,
     profiles_error: Option<String>,
+    workspace_guard: Option<model::WorkspaceGuard>,
     search: Option<HistorySearch>,
     palette: Option<CommandPalette>,
     applied_acrylic: bool,
@@ -190,18 +191,42 @@ impl TerminalApp {
         let storage = std::env::current_exe()
             .unwrap_or_default()
             .with_file_name("workspace.json");
-        let (workspace, load_status) = match std::fs::metadata(&storage) {
+        let (workspace, load_status, workspace_guard) = match std::fs::metadata(&storage) {
             Ok(_) => match Workspace::load(&storage) {
-                Ok(state) => (state, "Arbeitsbereich wiederhergestellt".to_string()),
-                Err(error) => (
-                    Workspace::default(),
-                    format!("Workspace nicht geladen: {error}"),
-                ),
+                Ok(state) => (state, "Arbeitsbereich wiederhergestellt".to_string(), None),
+                Err(error) => {
+                    // Never let the defaults silently replace the user's file on exit.
+                    let backup = model::backup_unloadable(&storage);
+                    let status = match &backup {
+                        Ok(path) => format!(
+                            "Workspace nicht geladen: {error}. Kopie gesichert unter {}; automatisches Speichern ist ausgesetzt.",
+                            path.display()
+                        ),
+                        Err(backup_error) => format!(
+                            "Workspace nicht geladen: {error}. Sicherung fehlgeschlagen ({backup_error}); Speichern ist gesperrt."
+                        ),
+                    };
+                    (
+                        Workspace::default(),
+                        status,
+                        Some(model::WorkspaceGuard {
+                            reason: error,
+                            backup: backup.ok(),
+                        }),
+                    )
+                }
             },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                (Workspace::default(), "Bereit".into())
+                (Workspace::default(), "Bereit".into(), None)
             }
-            Err(error) => (Workspace::default(), format!("Lesefehler: {error}")),
+            Err(error) => (
+                Workspace::default(),
+                format!("Lesefehler: {error}; Speichern ist gesperrt."),
+                Some(model::WorkspaceGuard {
+                    reason: error.to_string(),
+                    backup: None,
+                }),
+            ),
         };
         let (profiles, profiles_error) =
             match profiles::Library::load(&storage.with_file_name("profiles.json")) {
@@ -242,6 +267,7 @@ impl TerminalApp {
             profile_dialog: None,
             remote_dialog: None,
             profiles_error,
+            workspace_guard,
             search: None,
             palette: None,
             applied_acrylic: false,
@@ -519,13 +545,33 @@ impl TerminalApp {
         }
     }
 
+    /// Implicit save (exit, settings, connections): blocked while an unloaded file is protected.
     fn save_workspace(&mut self) -> bool {
+        self.write_workspace(false)
+    }
+
+    /// Save explicitly requested by the user; may replace a protected file once it is backed up.
+    fn save_workspace_explicit(&mut self) -> bool {
+        self.write_workspace(true)
+    }
+
+    fn write_workspace(&mut self, explicit: bool) -> bool {
+        if let Some(guard) = &self.workspace_guard {
+            if let Err(message) = guard.check(explicit) {
+                self.status = message;
+                return false;
+            }
+        }
         self.workspace.default_directory = Some(PathBuf::from(&self.directory));
         let result = (|| -> Result<(), String> {
             let encoded = serde_json::to_vec_pretty(&self.workspace).map_err(|e| e.to_string())?;
             model::atomic_write_json(&self.storage, &encoded)
         })();
         let saved = result.is_ok();
+        if saved {
+            // The file on disk is valid again; regular saving resumes.
+            self.workspace_guard = None;
+        }
         self.status = match result {
             Ok(()) => "Arbeitsbereich gespeichert".into(),
             Err(e) => format!("Speichern fehlgeschlagen: {e}"),
@@ -1002,7 +1048,7 @@ impl TerminalApp {
             }
             PaletteAction::ShowProfiles(saving) => self.show_profiles(saving),
             PaletteAction::SaveWorkspace => {
-                self.save_workspace();
+                self.save_workspace_explicit();
             }
             PaletteAction::ToggleSettings => {
                 self.settings = !self.settings;
@@ -1678,7 +1724,7 @@ impl eframe::App for TerminalApp {
                 self.close_target = Some(self.focused);
             }
             if ctx.input_mut(|i| i.consume_key(shortcuts, Key::S)) {
-                self.save_workspace();
+                self.save_workspace_explicit();
             }
             if ctx.input_mut(|i| i.consume_key(Modifiers::CTRL, Key::Tab)) {
                 self.cycle_pane();
@@ -1776,7 +1822,7 @@ impl eframe::App for TerminalApp {
                         .on_hover_text("Strg+Umschalt+S")
                         .clicked()
                     {
-                        self.save_workspace();
+                        self.save_workspace_explicit();
                     }
                     if ui.button("Einstellungen").clicked() {
                         self.settings = !self.settings;
@@ -2516,6 +2562,7 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             profile_dialog: None,
             remote_dialog: None,
             profiles_error: None,
+            workspace_guard: None,
             search: None,
             palette: None,
             applied_acrylic: false,
@@ -2858,6 +2905,7 @@ fn profile_test() -> Result<(), Box<dyn std::error::Error>> {
             profile_dialog: None,
             remote_dialog: None,
             profiles_error: None,
+            workspace_guard: None,
             search: None,
             palette: None,
             applied_acrylic: false,
