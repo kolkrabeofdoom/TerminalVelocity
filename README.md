@@ -308,7 +308,7 @@ Die JSON-Dateien sind lokale Konfigurationsdateien und können Hostnamen, Konton
 
 Die Anwendung befindet sich in Entwicklung. Es gibt automatisierte Prüfungen, aber keine vollständige manuelle Abnahme aller Bedienwege und Grafiktreiber.
 
-- Echte SSH-/WinRM-Anmeldungen wurden bisher nicht geprüft; die Verbindungstests laufen lokal ohne Serverzugriff.
+- SSH- und WinRM-Verbindungen wurden mit echten Servern praktisch geprüft. Die automatisierten Tests in der CI laufen dagegen ohne Serverzugriff.
 - Native Windows-Dateidialoge, Explorer-Ablage und das direkte Bildöffnen per Rechtsklick sind noch nicht vollständig im sichtbaren Fenster geprüft. Eingabe- und Renderlogik werden automatisiert getestet.
 - Terminalbilder überstehen Größenänderungen nicht. Sixel ist begrenzt implementiert; Kitty-Grafikprotokoll und benutzerdefinierte Shader fehlen.
 - Der Editor bearbeitet ein kleines UTF-8-Dokument zur Zeit und bietet keine Wiederherstellung nach einem erzwungenen Abbruch.

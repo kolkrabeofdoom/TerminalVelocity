@@ -37,7 +37,7 @@ Die beigefügte `.sha256`-Datei enthält die ZIP-Prüfsumme. `BUILD-INFO.json` i
 
 ## Bekannte Grenzen
 
-- Echte SSH-/WinRM-Anmeldungen sind bisher nicht geprüft. Die automatisierten Verbindungstests arbeiten ohne Remote-Server.
+- SSH- und WinRM-Verbindungen wurden mit echten Servern praktisch geprüft; die automatisierten Verbindungstests arbeiten weiterhin ohne Remote-Server.
 - Native Dateidialoge, Explorer-Ablage, direktes Bildöffnen per Rechtsklick und Grafiktreiberverhalten sind noch nicht vollständig im sichtbaren Fenster geprüft.
 - Fenster-, Layout- und Schriftgrößenänderungen löschen Terminalbilder. Sixel ist keine vollständige VT340-Emulation; Kitty-Grafikprotokoll, Bildzoom und Bildexport fehlen.
 - Angezeigte Dateipfade werden aus Terminaltext erkannt. Mehrdeutige oder abgeschnittene Namen können eine manuelle Dateiauswahl erfordern. Remote-Pfade werden nicht als lokale Dateien geöffnet.

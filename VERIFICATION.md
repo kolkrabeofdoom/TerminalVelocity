@@ -115,4 +115,6 @@ Neu geprüft:
 - PowerShell-Parser mit ersetzten Netzwerk-/Anmelde-Cmdlets: Endpunkt `end’; throw ‘INJECTION` und Konto mit `’` kommen wörtlich an, nichts wird ausgeführt.
 - Hexkodierte PowerShell-Ordnermeldung: Umlaute, `’`, `ł`, Emoji, Groß-/Kleinschreibung; ungerade Länge, Nicht-Hexzeichen, ungültiges UTF-8 und Überlänge werden abgelehnt.
 
-Nicht geprüft: `clippy`, grafische Klickpfade (Statusmeldung bei nicht ladbarem Workspace), echte SSH-/WinRM-Anmeldungen und Windows-Versionen außer Windows Server 2022.
+Praktisch geprüft (durch den Entwickler): SSH- und WinRM-Verbindungen mit echten Servern.
+
+Nicht geprüft: `clippy`, grafische Klickpfade (Statusmeldung bei nicht ladbarem Workspace) und Windows-Versionen außer Windows Server 2022.
