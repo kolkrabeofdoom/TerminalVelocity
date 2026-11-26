@@ -366,6 +366,8 @@ Mit `-OutputDirectory <neuer Ordner>` wird ein anderes Ziel verwendet; bestehend
 
 `BUILD-INFO.json` im Paket dokumentiert Git-Commit, Änderungsstatus, Toolchain, Cargo.lock-Prüfsumme, Laufzeitversionen und SHA256 je Datei. ZIP-Einträge sind sortiert und haben feste Zeitstempel. Identische Eingabedateien ergeben mit derselben Kompressionsumgebung identische ZIPs; bitidentische Neukompilierung auf beliebigen Rechnern wird damit nicht zugesichert.
 
+Veröffentlicht wird über den [Release-Workflow](.github/workflows/release.yml): **Actions → Release → Run workflow** auf `main` führt die komplette Prüfung aus, baut dieses Paket und legt das GitHub-Release `v<Version aus Cargo.toml>` mit ZIP und `.sha256` an. Titel und Text stammen aus `RELEASE_NOTES.md`; existiert das Release schon, bricht der Lauf ab.
+
 Die ZIP-Prüfsumme lässt sich mit PowerShell ermitteln und mit der veröffentlichten `.sha256`-Datei vergleichen:
 
 ```powershell
