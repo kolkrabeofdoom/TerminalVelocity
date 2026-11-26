@@ -25,6 +25,9 @@ try {
             throw "$mode exceeded two minutes"
         }
         $process.Refresh()
+        # Show the test report (e.g. directory-test.txt) so failures name the shell and cause.
+        $report = Join-Path (Split-Path -Parent $executable) ($mode.TrimStart('-') + '.txt')
+        if (Test-Path -LiteralPath $report) { Get-Content -LiteralPath $report -Encoding utf8 | Write-Host }
         if ($process.ExitCode -ne 0) { throw "$mode failed with exit code $($process.ExitCode)" }
     }
 } finally {

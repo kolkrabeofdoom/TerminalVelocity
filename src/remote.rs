@@ -94,9 +94,7 @@ impl Connection {
 
     pub fn winrm_script(&self) -> Result<String, String> {
         self.validate()?;
-        fn literal(value: &str) -> String {
-            format!("'{}'", value.replace('\'', "''"))
-        }
+        use crate::model::ps_literal as literal;
         let mut command = format!(
             "Enter-PSSession -ComputerName {} -ErrorAction Stop",
             literal(&self.host)
@@ -268,6 +266,11 @@ mod tests {
         let script = c.winrm_script().unwrap();
         assert!(script.contains("'DOMAIN\\O''Brien'"));
         assert!(script.contains("-ConfigurationName 'name''; throw ''bad'"));
+        c.endpoint = "name\u{2019}; throw \u{201B}bad".into();
+        assert!(c
+            .winrm_script()
+            .unwrap()
+            .contains("-ConfigurationName 'name\u{2019}\u{2019}; throw \u{201B}\u{201B}bad'"));
         assert!(script.contains("-UseSSL"));
         let workspace = Workspace::default();
         if let Ok((_, args)) = c.command(&workspace, Path::new(".")) {
@@ -333,12 +336,14 @@ mod tests {
             .expect("PowerShell 7 required for offline integration test");
         let mut c = connection();
         c.transport = Transport::WinRm;
-        c.user = "DOMAIN\\O'Brien".into();
-        c.endpoint = "end'; throw 'INJECTION".into();
+        c.user = "DOMAIN\\O'Brien D\u{2019}Angelo".into();
+        // PowerShell ends a single-quoted string at typographic quotes, too.
+        c.endpoint = "end\u{2019}; throw \u{2018}INJECTION".into();
         c.https = true;
         c.port = Some(5986);
         // Replace only the networking/credential cmdlets, retaining the actual PowerShell parser.
-        let fixture = "function Get-Credential { param($UserName, $Message) return $UserName }; function Enter-PSSession { [CmdletBinding()] param($ComputerName, $Port, [switch]$UseSSL, $ConfigurationName, $Credential) @{host=$ComputerName;port=$Port;https=$UseSSL.IsPresent;endpoint=$ConfigurationName;user=$Credential} | ConvertTo-Json -Compress }; ";
+        // EscapeNonAscii keeps the JSON independent of the console code page.
+        let fixture = "function Get-Credential { param($UserName, $Message) return $UserName }; function Enter-PSSession { [CmdletBinding()] param($ComputerName, $Port, [switch]$UseSSL, $ConfigurationName, $Credential) @{host=$ComputerName;port=$Port;https=$UseSSL.IsPresent;endpoint=$ConfigurationName;user=$Credential} | ConvertTo-Json -Compress -EscapeHandling EscapeNonAscii }; ";
         let output = std::process::Command::new(pwsh)
             .args([
                 "-NoLogo",

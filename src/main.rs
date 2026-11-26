@@ -2407,8 +2407,8 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
             wait_for_directory(&mut backend, &receiver, &base, &token)?;
             let command = match shell {
                 Shell::PowerShell => format!(
-                    "Set-Location -LiteralPath '{}'\r",
-                    test_root.to_string_lossy().replace('\'', "''")
+                    "Set-Location -LiteralPath {}\r",
+                    model::ps_literal(&test_root.to_string_lossy())
                 ),
                 Shell::Cmd => format!("cd /d \"{}\"\r", test_root.display()),
                 _ => format!(
@@ -2599,8 +2599,8 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
         send(
             &mut app,
             &format!(
-                "Set-Location -LiteralPath '{}'\r",
-                root.to_string_lossy().replace('\'', "''")
+                "Set-Location -LiteralPath {}\r",
+                model::ps_literal(&root.to_string_lossy())
             ),
         );
         wait(&mut app, |app| {
