@@ -23,6 +23,8 @@ use std::{
 
 struct Session {
     generation: u64,
+    /// Key that a directory report from this session's shell must carry.
+    cwd_token: String,
     backend: Option<TerminalBackend>,
     error: Option<String>,
     exited: bool,
@@ -82,7 +84,7 @@ fn handle_session_event(
         return;
     };
     if let PtyEvent::Title(ref title) = event {
-        workspace.update_directory(pane_id, title);
+        workspace.update_directory(pane_id, title, &session.cwd_token);
     }
     if matches!(event, PtyEvent::Exit | PtyEvent::ChildExit(_)) {
         session.exited = true;
@@ -345,8 +347,10 @@ impl TerminalApp {
         self.sessions.remove(&pane.id);
         let generation = self.next_session_id;
         self.next_session_id += 1;
+        let cwd_token = model::new_cwd_token();
         let app_dir = self.app_dir().to_path_buf();
         let result = (|| {
+            let mut env = Default::default();
             if !pane.directory.is_dir() {
                 return Err(format!("Startordner fehlt: {}", pane.directory.display()));
             }
@@ -367,7 +371,8 @@ impl TerminalApp {
                             pane.shell.label()
                         )
                     })?;
-                pane.shell.launch(executable, &app_dir, false)?
+                env = pane.shell.session_env(&cwd_token);
+                pane.shell.launch(executable, &app_dir, false, &cwd_token)?
             };
             TerminalBackend::new(
                 generation,
@@ -377,6 +382,7 @@ impl TerminalApp {
                     shell: executable.to_string_lossy().into_owned(),
                     args,
                     working_directory: Some(pane.directory.clone()),
+                    env,
                 },
             )
             .map_err(|e| e.to_string())
@@ -384,6 +390,7 @@ impl TerminalApp {
         let session = match result {
             Ok(backend) => Session {
                 generation,
+                cwd_token,
                 backend: Some(backend),
                 error: None,
                 exited: false,
@@ -391,6 +398,7 @@ impl TerminalApp {
             },
             Err(error) => Session {
                 generation,
+                cwd_token: String::new(),
                 backend: None,
                 error: Some(error),
                 exited: false,
@@ -2255,7 +2263,7 @@ fn smoke_test() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
         let (executable, args) = if shell.is_ai() || shell == Shell::PowerShell {
             let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
-            shell.launch(executable, &base, true)?
+            shell.launch(executable, &base, true, "")?
         } else {
             (executable, args)
         };
@@ -2289,6 +2297,7 @@ fn smoke_test() -> Result<(), Box<dyn std::error::Error>> {
                 shell: executable.display().to_string(),
                 args,
                 working_directory: Some(std::env::current_dir()?),
+                env: Default::default(),
             },
         )?;
         let deadline = Instant::now() + Duration::from_secs(25);
@@ -2337,6 +2346,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
         backend: &mut TerminalBackend,
         receiver: &Receiver<(u64, PtyEvent)>,
         expected: &std::path::Path,
+        token: &str,
     ) -> Result<String, String> {
         let deadline = Instant::now() + Duration::from_secs(20);
         let mut last_title = String::new();
@@ -2346,7 +2356,9 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                 receiver.recv_timeout(Duration::from_millis(50))
             {
                 if title
-                    .strip_prefix("TERMINALVELOCITY_CWD:")
+                    .strip_prefix(model::CWD_MARKER)
+                    .and_then(|rest| rest.strip_prefix(token))
+                    .and_then(|rest| rest.strip_prefix(':'))
                     .is_some_and(|path| {
                         PathBuf::from(path)
                             .canonicalize()
@@ -2378,7 +2390,8 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                 report.push(format!("{}: nicht installiert", shell.label()));
                 continue;
             };
-            let (program, args) = shell.launch(program, &base, false)?;
+            let token = model::new_cwd_token();
+            let (program, args) = shell.launch(program, &base, false, &token)?;
             let (sender, receiver) = mpsc::channel();
             let mut backend = TerminalBackend::new(
                 1,
@@ -2388,9 +2401,10 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                     shell: program.display().to_string(),
                     args,
                     working_directory: Some(base.clone()),
+                    env: shell.session_env(&token),
                 },
             )?;
-            wait_for_directory(&mut backend, &receiver, &base)?;
+            wait_for_directory(&mut backend, &receiver, &base, &token)?;
             let command = match shell {
                 Shell::PowerShell => format!(
                     "Set-Location -LiteralPath '{}'\r",
@@ -2406,7 +2420,7 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                 ),
             };
             backend.process_command(egui_term::BackendCommand::Write(command.into_bytes()));
-            let title = wait_for_directory(&mut backend, &receiver, &test_root)?;
+            let title = wait_for_directory(&mut backend, &receiver, &test_root, &token)?;
             let mut workspace = Workspace::default();
             workspace.tabs.push(Tab {
                 name: "source".into(),
@@ -2417,14 +2431,19 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                     directory: base.clone(),
                 }),
             });
-            if !workspace.update_directory(1, &title) {
+            if workspace.update_directory(1, &title, &model::new_cwd_token()) {
+                return Err("Ordnerereignis mit fremdem Schlüssel wurde übernommen".into());
+            }
+            if !workspace.update_directory(1, &title, &token) {
                 return Err("Ordnerereignis wurde nicht übernommen".into());
             }
             let inherited = workspace.inherited_directory(1, &base);
             let next_program = Shell::PowerShell
                 .resolve(None, &base)
                 .ok_or("PowerShell fehlt")?;
-            let (next_program, next_args) = Shell::PowerShell.launch(next_program, &base, false)?;
+            let next_token = model::new_cwd_token();
+            let (next_program, next_args) =
+                Shell::PowerShell.launch(next_program, &base, false, &next_token)?;
             let (next_sender, next_receiver) = mpsc::channel();
             let mut next = TerminalBackend::new(
                 2,
@@ -2434,9 +2453,10 @@ fn directory_test() -> Result<(), Box<dyn std::error::Error>> {
                     shell: next_program.display().to_string(),
                     args: next_args,
                     working_directory: Some(inherited),
+                    env: Default::default(),
                 },
             )?;
-            wait_for_directory(&mut next, &next_receiver, &test_root)?;
+            wait_for_directory(&mut next, &next_receiver, &test_root, &next_token)?;
             report.push(format!("{}: cd erkannt; neuer Bereich im übernommenen Ordner gestartet (Leerzeichen, Apostroph, Unicode)", shell.label()));
         }
         Ok(report)
@@ -2596,9 +2616,13 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
         );
         wait_output(&mut app, "RESTART_OLD")?;
         let old_generation = app.sessions[&1].generation;
+        let old_token = app.sessions[&1].cwd_token.clone();
         app.restart_pane(1, &ctx);
         if app.sessions[&1].generation == old_generation {
             return Err("Alte Sitzung wurde wiederverwendet".into());
+        }
+        if app.sessions[&1].cwd_token == old_token {
+            return Err("Neue Sitzung hat den alten Ordnerschlüssel übernommen".into());
         }
         handle_session_event(
             &mut app.workspace,
@@ -2611,7 +2635,11 @@ fn restart_test() -> Result<(), Box<dyn std::error::Error>> {
             &mut app.workspace,
             &mut app.sessions,
             old_generation,
-            PtyEvent::Title(format!("TERMINALVELOCITY_CWD:{}", base.display())),
+            PtyEvent::Title(format!(
+                "{}{old_token}:{}",
+                model::CWD_MARKER,
+                base.display()
+            )),
             Some(app.focused),
         );
         if app.sessions[&1].exited
@@ -2702,7 +2730,7 @@ fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
         let executable = Shell::PowerShell
             .resolve(None, &base)
             .ok_or("PowerShell fehlt")?;
-        let (program, args) = Shell::PowerShell.launch(executable, &base, false)?;
+        let (program, args) = Shell::PowerShell.launch(executable, &base, false, "")?;
         let (sender, _receiver) = mpsc::channel();
         let mut source = TerminalBackend::new(
             1,
@@ -2712,6 +2740,7 @@ fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
                 shell: program.display().to_string(),
                 args,
                 working_directory: Some(base.clone()),
+                env: Default::default(),
             },
         )?;
         source.process_command(egui_term::BackendCommand::Write(
@@ -2799,6 +2828,7 @@ fn handoff_test() -> Result<(), Box<dyn std::error::Error>> {
                     shell: program.display().to_string(),
                     args,
                     working_directory: Some(root.clone()),
+                    env: Default::default(),
                 },
             )?;
             for marker in expected {
@@ -3016,7 +3046,7 @@ fn search_test() -> Result<(), Box<dyn std::error::Error>> {
     let base = std::env::current_exe()?.parent().unwrap().to_path_buf();
     let (sender, _receiver) = mpsc::channel();
     let executable = Shell::Cmd.resolve(None, &base).ok_or("CMD fehlt")?;
-    let (program, _) = Shell::Cmd.launch(executable, &base, false)?;
+    let (program, _) = Shell::Cmd.launch(executable, &base, false, "")?;
     let commands = format!("(for /L %i in (1,1,140) do @echo TV_SEARCH_%i literal.[x] Grüße) & echo {}WRAP_NEEDLE & echo TV_SEARCH_DONE", "X".repeat(75));
     let args = vec!["/D".into(), "/Q".into(), "/K".into(), commands];
     let mut backend = TerminalBackend::new(
@@ -3027,6 +3057,7 @@ fn search_test() -> Result<(), Box<dyn std::error::Error>> {
             shell: program.display().to_string(),
             args,
             working_directory: Some(base),
+            env: Default::default(),
         },
     )?;
     wait(&mut backend, "TV_SEARCH_DONE")?;
@@ -3211,6 +3242,7 @@ mod tests {
             1,
             Session {
                 generation: 10,
+                cwd_token: model::new_cwd_token(),
                 backend: None,
                 error: None,
                 exited: false,
@@ -3221,6 +3253,7 @@ mod tests {
             2,
             Session {
                 generation: 20,
+                cwd_token: model::new_cwd_token(),
                 backend: None,
                 error: None,
                 exited: false,

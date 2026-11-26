@@ -211,6 +211,7 @@ impl TerminalBackend {
             shell: Some(tty::Shell::new(program, settings.args)),
             escape_args: true,
             working_directory: settings.working_directory,
+            env: settings.env,
             ..tty::Options::default()
         };
         let config = term::Config::default();

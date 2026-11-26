@@ -294,9 +294,16 @@ mod tests {
                 remote: Some(c.clone()),
             }),
         });
+        // Remote panes ignore directory reports even when they carry the right key.
+        let token = crate::model::new_cwd_token();
         assert!(!workspace.update_directory(
             1,
-            &format!("TERMINALVELOCITY_CWD:{}", base.join("src").display())
+            &format!(
+                "{}{token}:{}",
+                crate::model::CWD_MARKER,
+                base.join("src").display()
+            ),
+            &token
         ));
         assert_eq!(workspace.inherited_directory(1, Path::new("missing")), base);
         let encoded = serde_json::to_vec(&workspace).unwrap();
@@ -412,6 +419,7 @@ mod tests {
                 shell: program.display().to_string(),
                 args,
                 working_directory: Some(std::env::current_dir().unwrap()),
+                env: Default::default(),
             },
         )
         .unwrap();

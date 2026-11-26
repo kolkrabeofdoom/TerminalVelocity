@@ -61,6 +61,7 @@ fn conpty_backend_uploads_and_paints_sixel_texture() {
         args: vec!["-NoLogo".into(), "-NoProfile".into(), "-Command".into(),
             "Start-Sleep -Seconds 2; [Console]::WriteLine('Bild_ä.png'); [Console]::Write(\"`eP0;1q`\"1;1;12;6#1;2;100;0;0#1!12~`e\\\"); Start-Sleep -Seconds 2".into()],
         working_directory: None,
+        env: Default::default(),
     }).unwrap();
     let frame = |backend: &mut TerminalBackend| {
         context.run(
