@@ -1,5 +1,14 @@
 # Änderungen
 
+## 1.0.1 – „SecureAllConnections-Fix“ – 26. November 2026
+
+- **Kein stiller Verlust von `workspace.json`**: Lässt sich die Datei nicht laden, wird sie als `workspace.json.broken-<Zeitstempel>` gesichert. Automatisches Speichern (Beenden, Einstellungen, Verbindungsdialog) ist ausgesetzt; nur „Workspace speichern“ ersetzt die Datei bewusst, und nur wenn die Sicherung gelungen ist. Bisher wurden gespeicherte Verbindungen, Programmpfade und Layout beim Beenden mit Standardwerten überschrieben.
+- **Ordnermeldungen mit Sitzungsschlüssel**: Den Arbeitsordner eines Bereichs übernimmt TerminalVelocity nur noch aus Meldungen mit einem zufälligen 128-Bit-Schlüssel der Sitzung (`TERMINALVELOCITY_CWD:<schlüssel>:<pfad>`). Angezeigte Dateien, `git log` oder von Hand gestartete SSH-Sitzungen können neue Tabs, Teilungen und KI-Sitzungen nicht mehr in fremde Ordner umleiten. Git Bash erhält den Schlüssel per Umgebungsvariable, die das Startskript sofort entfernt.
+- **Typografische Anführungszeichen in PowerShell**: `‘ ’ ‚ ‛` werden wie `'` maskiert. Behebt den fehlschlagenden KI-CLI-Start bei Pfaden wie `C:\Users\D’Angelo` und verhindert, dass Konto oder Endpunkt einer WinRM-Verbindung den PowerShell-String vorzeitig beenden.
+- **PowerShell-Ordnermeldung unabhängig von der Codepage**: PowerShell meldet den Pfad UTF-8-hexkodiert (`TERMINALVELOCITY_CWDX:`). Ordner mit Zeichen außerhalb der Konsolen-Codepage (`’`, `ł`, CJK, Emoji …) werden jetzt korrekt übernommen statt still verworfen.
+- **CI**: Die Berichte der PTY-Tests stehen im Log; der Ordner-Test läuft mit `’` und `ł` im Pfad für PowerShell, CMD und Git Bash.
+- `egui_term`: `BackendSettings::env` reicht Umgebungsvariablen an ConPTY durch (siehe `VENDOR_CHANGES.md`).
+
 ## 1.0.0 – Voll-Release
 
 - **Hilfe-Sektion (`F1` / „Hilfe“)**: Integrierte Übersicht aller Tastenkürzel und Bedienungsabläufe direkt in der Anwendung.

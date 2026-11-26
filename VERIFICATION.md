@@ -102,3 +102,17 @@ Versionssprung auf `1.0.0`, Einbindung der Hilfe- (`F1`) und Über-Dialoge (GitH
 ## Sicherheitshärtung und Komfortfunktionen 0.9.3
 
 46 Haupttests, drei Renderer-Tests, elf Bild-/Sixel-Tests, zwei ConPTY-Tests und 54 vte-Parserprüfungen (116 Tests insgesamt) sowie `cargo clippy --all-targets --locked -- -D warnings`, Formatierung, Release-Build und Paketierung erfolgreich. Neu geprüft: Ablehnung von UNC- und Gerätepfaden (`\\server\share`, `\\.\...`) einschließlich kanonisierter Symlink-/Junction-Ziele bei `TERMINALVELOCITY_CWD:`-Titeln, Workspace-Validierung, Shell-/SSH-Auflösung, KI-Übergabe, Rechtsklick-Bildpfaden und Editor-Dateipfaden; Bracketed-Paste-Kodierung (`\x1b[200~` … `\x1b[201~`) mit Filterung eingebetteter `ESC`-/`CSI`-/`NUL`-Steuerzeichen (`encode_paste`); Beschränkung von `is_safe_http_url` auf gültige `http(s)://`-Links ohne `file://`-Ausführung; Vorrang des System-`PATH` (`Machine`) vor dem Benutzer-`PATH` (`User`) in PowerShell-Sitzungen; Ablehnung innerer Anführungszeichen (`"`) in Programm- und Schlüsselpfaden, ungültiger Tab-Namen sowie nicht-finiter Fließkommawerte (`NaN`/`Infinity`); 2-MiB-Größenbegrenzung beim Laden von `workspace.json`; Ablehnung von Pfad-Traversierung (`..`) in `package.json` bei `node_entry`; atomare JSON-Speicherung über `create_new(true)`; Umstellung auf Antigravity CLI (`agy.exe`) inklusive abwärtskompatibler Deserialisierung alter `"Gemini"`-Einträge; Erkennung lokaler Textdateipfade und `pfad:zeile(:spalte)`-Stacktraces mit Zeilensprung im Editor; Übernahme markierter Terminalausgaben als ungespeichertes Editordokument; Stichwortfilterung der Befehlspalette (`Strg+Umschalt+P`) sowie Hintergrund-Benachrichtigungen (`●`) bei `BEL`- und Exit-Ereignissen inaktiver Sitzungen.
+
+## 1.0.1 „SecureAllConnections-Fix“ – 26. November 2026
+
+Geprüft über GitHub Actions (`windows.yml`, Windows Server 2022, Rust 1.89.0) mit `scripts/ci.ps1`: `cargo fmt --check`, `cargo test --locked -- --include-ignored` (121 Tests, davon 51 im Hauptprogramm), Parser-Regressionstests für `vte`, Release-Build und die PTY-Modi `--directory-test`, `--restart-test`, `--profile-test` und `--search-test`. Die PTY-Berichte stehen jetzt im CI-Log.
+
+Neu geprüft:
+
+- Nicht ladbare `workspace.json`: Sicherung per `create_new`, keine Überschreibung bestehender Sicherungen, automatisches Speichern gesperrt, ausdrückliches Speichern nur mit Sicherung.
+- Ordnermeldungen ohne, mit fremdem, verkürztem oder leerem Schlüssel werden abgelehnt; Remote-Bereiche lehnen auch korrekt verschlüsselte Meldungen ab. Ein Neustart erzeugt einen neuen Schlüssel, Ereignisse mit dem alten bleiben wirkungslos.
+- Echte PTYs mit PowerShell, CMD und Git Bash (Schlüssel per Umgebungsvariable): Ordnerwechsel in einen Ordner mit Leerzeichen, `'`, `’`, `ł` und `ü` erkannt, neuer Bereich im übernommenen Ordner gestartet; dieselbe Meldung mit fremdem Schlüssel abgelehnt.
+- PowerShell-Parser mit ersetzten Netzwerk-/Anmelde-Cmdlets: Endpunkt `end’; throw ‘INJECTION` und Konto mit `’` kommen wörtlich an, nichts wird ausgeführt.
+- Hexkodierte PowerShell-Ordnermeldung: Umlaute, `’`, `ł`, Emoji, Groß-/Kleinschreibung; ungerade Länge, Nicht-Hexzeichen, ungültiges UTF-8 und Überlänge werden abgelehnt.
+
+Nicht geprüft: `clippy`, grafische Klickpfade (Statusmeldung bei nicht ladbarem Workspace), echte SSH-/WinRM-Anmeldungen und Windows-Versionen außer Windows Server 2022.

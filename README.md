@@ -4,7 +4,7 @@
 
 TerminalVelocity ist ein Windows-Terminal mit Tabs, geteilten Ansichten, SSH- und WinRM-Verbindungen, einem lokalen Texteditor und Bildanzeige. Vorhandene KI-Kommandozeilenprogramme lassen sich als eigene Sitzungen starten; markierte Terminalausgaben können nach Prüfung an sie übergeben werden.
 
-**Version 1.0.0 · Windows x64 · MIT-Lizenz**
+**Version 1.0.1 „SecureAllConnections-Fix“ · Windows x64 · MIT-Lizenz**
 
 [Download und Release Notes](https://github.com/kolkrabeofdoom/TerminalVelocity/releases/latest) · [Änderungsverlauf](CHANGELOG.md) · [Prüfbericht](VERIFICATION.md) · [GitHub-Repository](https://github.com/kolkrabeofdoom/TerminalVelocity)
 
@@ -45,11 +45,13 @@ TerminalVelocity benötigt Windows x64 mit Pseudoterminal-Unterstützung und ein
 
 Die neue Version in einen eigenen Ordner entpacken. Für die bisherigen Einstellungen `workspace.json` und gegebenenfalls `profiles.json` aus dem alten Programmordner übernehmen. Relative Programm- und Hintergrundbildpfade beziehen sich auf den neuen Programmordner und müssen dort weiterhin stimmen. Die Anwendung vor dem Kopieren der Einstellungen schließen.
 
+Kann `workspace.json` nicht geladen werden (zum Beispiel beschädigt oder von einer neueren Version geschrieben), startet TerminalVelocity mit Standardwerten und legt vorher eine Kopie als `workspace.json.broken-<Zeitstempel>` daneben. Automatisches Speichern ist dann ausgesetzt, damit die Originaldatei nicht unbemerkt ersetzt wird. Erst **Workspace speichern** (Strg+Umschalt+S) überschreibt sie bewusst. Schlägt schon die Kopie fehl, wird gar nicht gespeichert.
+
 ## Tabs, Bereiche und Arbeitsordner
 
 **+ Tab** startet das oben ausgewählte Programm in einem neuen Tab. **Nebeneinander** und **Untereinander** teilen den aktiven Bereich. Teilungen können verschachtelt und ihre Trennlinien mit der Maus verschoben werden. Ein Klick aktiviert einen Bereich; seine Umrandung kennzeichnet den Fokus.
 
-Neue lokale Tabs und Teilungen übernehmen den zuletzt gemeldeten Arbeitsordner des aktiven Bereichs. PowerShell, CMD und Git Bash melden Verzeichniswechsel am Prompt. Die Bereichsüberschrift zeigt diesen Ordner. Für Sitzungen ohne Shell-Prompt, etwa direkt gestartete KI-CLIs, bleibt der geerbte Startordner maßgeblich. Unter **Einstellungen → Startordner ohne aktiven Bereich** lässt sich der Rückfallordner festlegen.
+Neue lokale Tabs und Teilungen übernehmen den zuletzt gemeldeten Arbeitsordner des aktiven Bereichs. PowerShell, CMD und Git Bash melden Verzeichniswechsel am Prompt. Jede Sitzung erhält dafür einen zufälligen Schlüssel; Ordnermeldungen ohne diesen Schlüssel, etwa aus angezeigten Dateien, `git log` oder entfernten Servern, werden ignoriert. Die Bereichsüberschrift zeigt diesen Ordner. Für Sitzungen ohne Shell-Prompt, etwa direkt gestartete KI-CLIs, bleibt der geerbte Startordner maßgeblich. Unter **Einstellungen → Startordner ohne aktiven Bereich** lässt sich der Rückfallordner festlegen.
 
 **Sitzung neu starten** beendet den bisherigen Prozess und startet dasselbe Programm im übernommenen Ordner neu. Die Ausgabe dieses Bereichs wird geleert; andere Bereiche laufen weiter. Bei einer noch laufenden Sitzung wird vorher nachgefragt. Ein fehlender Startordner führt zu einer Fehlermeldung.
 
@@ -293,6 +295,7 @@ Die Kürzel gelten im jeweiligen Bedienkontext. Insbesondere öffnet Strg+Umscha
 | Datei oder Inhalt | Speicherung |
 | --- | --- |
 | `workspace.json` neben der EXE | Tabs, Teilungen, Programme, zuletzt gemeldete lokale Ordner, Verbindungsprofile und Darstellungseinstellungen |
+| `workspace.json.broken-<Zeitstempel>` | Unveränderte Kopie einer nicht ladbaren `workspace.json` (siehe [Aktualisieren](#aktualisieren)) |
 | `profiles.json` neben der EXE | Benannte Projektvorlagen einschließlich ihrer Verbindungskopien |
 | Hintergrundbilder | Nur der gewählte Dateipfad im Workspace |
 | Terminalausgabe, Terminalbilder, Suchtext | Nicht im Workspace gespeichert |
@@ -347,7 +350,7 @@ Für einen vollständigen Programmordner einschließlich der Hilfsskripte ist `b
 
 Der Ablauf prüft Formatierung, die Haupttests einschließlich ausdrücklich aktivierter Offline-Integrationstests, die vte-Parser-Tests, den Release-Build und vier reale Windows-PTY-Prüfungen: Ordnerübernahme, Sitzungsneustart, Projektprofile und Verlaufssuche. PowerShell 7 und OpenSSH müssen lokal verfügbar sein. Die Tests stellen keine Remote-Verbindung her und senden keine KI-Anfragen; notwendige Downloads beim Vorbereiten des Builds benötigen Internet.
 
-Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die lokale Suite umfasst derzeit **116 Tests** plus die vier PTY-Prüfungen.
+Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die Suite umfasst derzeit **121 Tests** plus die vier PTY-Prüfungen; deren Berichte erscheinen im CI-Log.
 
 Weitere Diagnosemodi der EXE sind `--smoke-test`, `--directory-test`, `--restart-test`, `--profile-test` und `--search-test`. Sie erzeugen Berichte neben der EXE. Für `--handoff-test` zuvor mit `--features test-tools` bauen und die erzeugte `prompt-probe.exe` neben die Terminal-EXE legen. Dieser Test verwendet ein lokales Probeprogramm statt einer KI-Anfrage.
 
@@ -357,7 +360,7 @@ Weitere Diagnosemodi der EXE sind `--smoke-test`, `--directory-test`, `--restart
 ./scripts/package.ps1
 ```
 
-Das Skript führt Tests und Build aus, ergänzt die festgeschriebenen PowerShell- und ConPTY-Dateien und erstellt `dist/TerminalVelocity-1.0.0-Windows-x64.zip` sowie eine `.sha256`-Datei. Downloadquellen und Prüfsummen stehen in [powershell-source.json](shells/powershell-source.json) und [conpty-source.json](shells/conpty-source.json).
+Das Skript führt Tests und Build aus, ergänzt die festgeschriebenen PowerShell- und ConPTY-Dateien und erstellt `dist/TerminalVelocity-1.0.1-Windows-x64.zip` sowie eine `.sha256`-Datei. Downloadquellen und Prüfsummen stehen in [powershell-source.json](shells/powershell-source.json) und [conpty-source.json](shells/conpty-source.json).
 
 Mit `-OutputDirectory <neuer Ordner>` wird ein anderes Ziel verwendet; bestehende Paketordner werden nicht überschrieben. `-SkipBuild` ist nur für einen bereits zum aktuellen Quellstand passenden Release-Build gedacht. KI-CLIs, persönliche Einstellungen und Zugangsdaten werden nicht eingepackt.
 
@@ -366,7 +369,7 @@ Mit `-OutputDirectory <neuer Ordner>` wird ein anderes Ziel verwendet; bestehend
 Die ZIP-Prüfsumme lässt sich mit PowerShell ermitteln und mit der veröffentlichten `.sha256`-Datei vergleichen:
 
 ```powershell
-Get-FileHash .\TerminalVelocity-1.0.0-Windows-x64.zip -Algorithm SHA256
+Get-FileHash .\TerminalVelocity-1.0.1-Windows-x64.zip -Algorithm SHA256
 ```
 
 ## Technik und Lizenzen
