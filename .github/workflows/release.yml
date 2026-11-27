@@ -55,7 +55,7 @@ jobs:
           [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "title=$title`n", [Text.UTF8Encoding]::new($false))
       - name: Install tested Rust toolchain
         run: |
-          rustup toolchain install 1.89.0 --profile minimal --component rustfmt
+          rustup toolchain install 1.89.0 --profile minimal --component rustfmt,clippy
           if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed' }
           rustup override set 1.89.0
           if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain selection failed' }

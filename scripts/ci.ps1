@@ -9,6 +9,8 @@ try {
 
     & cargo fmt -- --check
     if ($LASTEXITCODE -ne 0) { throw 'Formatting check failed' }
+    & cargo clippy --locked --all-targets --all-features -- -D warnings
+    if ($LASTEXITCODE -ne 0) { throw 'Clippy failed' }
     & cargo test --locked -- --include-ignored
     if ($LASTEXITCODE -ne 0) { throw 'Offline tests failed' }
     & cargo test --locked -p vte --lib
