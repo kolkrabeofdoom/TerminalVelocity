@@ -317,7 +317,7 @@ Der genaue Prüfstand einschließlich früherer Versionen steht in [VERIFICATION
 
 ## Aus den Quellen bauen
 
-Voraussetzungen für den geprüften Build: **Windows x64**, **PowerShell 7**, **Rust 1.89.0** mit `rustfmt` sowie **Microsoft C++ Build Tools und Windows SDK** für `x86_64-pc-windows-msvc`. Neuere Toolchains können funktionieren; der dokumentierte CI-Ablauf verwendet 1.89.0.
+Voraussetzungen für den geprüften Build: **Windows x64**, **PowerShell 7**, **Rust 1.89.0** mit `rustfmt` und `clippy` sowie **Microsoft C++ Build Tools und Windows SDK** für `x86_64-pc-windows-msvc`. Neuere Toolchains können funktionieren; der dokumentierte CI-Ablauf verwendet 1.89.0.
 
 Im Repositoryordner:
 
@@ -347,7 +347,7 @@ Für einen vollständigen Programmordner einschließlich der Hilfsskripte ist `b
 ./scripts/ci.ps1
 ```
 
-Der Ablauf prüft Formatierung, die Haupttests einschließlich ausdrücklich aktivierter Offline-Integrationstests, die vte-Parser-Tests, den Release-Build und vier reale Windows-PTY-Prüfungen: Ordnerübernahme, Sitzungsneustart, Projektprofile und Verlaufssuche. PowerShell 7 und OpenSSH müssen lokal verfügbar sein. Die Tests stellen keine Remote-Verbindung her und senden keine KI-Anfragen; notwendige Downloads beim Vorbereiten des Builds benötigen Internet.
+Der Ablauf prüft Formatierung, `clippy` ohne Warnungen (`-D warnings`), die Haupttests einschließlich ausdrücklich aktivierter Offline-Integrationstests, die vte-Parser-Tests, den Release-Build und vier reale Windows-PTY-Prüfungen: Ordnerübernahme, Sitzungsneustart, Projektprofile und Verlaufssuche. PowerShell 7 und OpenSSH müssen lokal verfügbar sein. Die Tests stellen keine Remote-Verbindung her und senden keine KI-Anfragen; notwendige Downloads beim Vorbereiten des Builds benötigen Internet.
 
 Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die Suite umfasst derzeit **121 Tests** plus die vier PTY-Prüfungen; deren Berichte erscheinen im CI-Log.
 
