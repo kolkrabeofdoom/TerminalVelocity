@@ -49,7 +49,9 @@ impl TerminalApp {
     pub(crate) fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
         let mut fonts = egui::FontDefinitions::default();
-        if let Ok(bytes) = std::fs::read("C:/Windows/Fonts/consola.ttf") {
+        if let Some(bytes) = model::system_font_path("consola.ttf", |key| std::env::var(key).ok())
+            .and_then(|path| std::fs::read(path).ok())
+        {
             fonts
                 .font_data
                 .insert("consolas".into(), egui::FontData::from_owned(bytes).into());

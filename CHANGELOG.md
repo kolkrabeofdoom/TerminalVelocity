@@ -1,5 +1,11 @@
 # Änderungen
 
+## Unveröffentlicht
+
+- **Consolas auch ohne `C:`**: Die Terminalschrift wird aus `%SystemRoot%\Fonts` geladen statt fest aus `C:\Windows\Fonts`. Liegt Windows auf einem anderen Laufwerk, fiel TerminalVelocity bisher still auf die eingebaute Schrift zurück.
+- **Kein Hängen bei getrennten Netzlaufwerken**: Meldet eine Shell einen Ordner auf einem eingehängten Netzlaufwerk, prüft TerminalVelocity dessen Existenz nicht mehr im Fenster-Thread; geprüft wird beim Start einer Sitzung dort. Meldungen ohne Ordnerwechsel greifen gar nicht mehr aufs Dateisystem zu.
+- Intern: Testmodi nur noch mit Feature `test-tools`, `main.rs` in Module zerlegt, `clippy` in der CI.
+
 ## 1.0.1 – „SecureAllConnections-Fix“ – 26. November 2026
 
 - **Kein stiller Verlust von `workspace.json`**: Lässt sich die Datei nicht laden, wird sie als `workspace.json.broken-<Zeitstempel>` gesichert. Automatisches Speichern (Beenden, Einstellungen, Verbindungsdialog) ist ausgesetzt; nur „Workspace speichern“ ersetzt die Datei bewusst, und nur wenn die Sicherung gelungen ist. Bisher wurden gespeicherte Verbindungen, Programmpfade und Layout beim Beenden mit Standardwerten überschrieben.
