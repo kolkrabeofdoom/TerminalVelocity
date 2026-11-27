@@ -48,20 +48,8 @@ pub(crate) struct TerminalApp {
 impl TerminalApp {
     pub(crate) fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
-        let mut fonts = egui::FontDefinitions::default();
-        if let Some(bytes) = model::system_font_path("consola.ttf", |key| std::env::var(key).ok())
-            .and_then(|path| std::fs::read(path).ok())
-        {
-            fonts
-                .font_data
-                .insert("consolas".into(), egui::FontData::from_owned(bytes).into());
-            fonts
-                .families
-                .entry(egui::FontFamily::Monospace)
-                .or_default()
-                .insert(0, "consolas".into());
-            cc.egui_ctx.set_fonts(fonts);
-        }
+        // Consolas plus Windows fallback fonts for symbols, emoji and CJK.
+        fonts::install(&cc.egui_ctx);
         let storage = std::env::current_exe()
             .unwrap_or_default()
             .with_file_name("workspace.json");

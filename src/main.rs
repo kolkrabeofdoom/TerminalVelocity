@@ -10,6 +10,7 @@ mod background;
 mod diagnostics;
 mod editor;
 mod effects;
+mod fonts;
 mod inline_image;
 mod model;
 mod platform;

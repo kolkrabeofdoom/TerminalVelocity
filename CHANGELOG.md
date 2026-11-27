@@ -1,5 +1,9 @@
 # Änderungen
 
+## Unveröffentlicht
+
+- **Ersatzschriften für fehlende Zeichen**: Symbole, die KI-CLIs ständig ausgeben (✓ ✗ ⎿ ✻ …), sowie chinesische, japanische und koreanische Schrift erschienen bisher als Kästchen. Jetzt springen Segoe UI Symbol, Segoe UI Emoji, Microsoft YaHei und Malgun Gothic aus `%SystemRoot%\Fonts` ein, sofern vorhanden.
+
 ## 1.1.0 – „Nigge Tied“ – 27. November 2026
 
 - **Plattdütsk (Ostwestfaolen)**: Neue Oberflächensprache neben Hochdeutsch, umschaltbar unter Einstellungen → Sprache, sofort wirksam. Alle rund 330 Texte der Oberfläche sind übersetzt; KI-Schnellaktionen antworten dann auf Plattdeutsch.
