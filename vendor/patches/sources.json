@@ -1,0 +1,37 @@
+{
+  "note": "Original crates from crates.io (sha256 = crates.io index cksum). Files in dropped are removed before applying the patch.",
+  "crates": [
+    {
+      "name": "alacritty_terminal",
+      "version": "0.25.1",
+      "sha256": "46319972e74179d707445f64aaa2893bbf6a111de3a9af29b7eb382f8b39e282",
+      "dropped": [
+        ".cargo_vcs_info.json",
+        "CHANGELOG.md",
+        "Cargo.lock",
+        "Cargo.toml.orig"
+      ]
+    },
+    {
+      "name": "vte",
+      "version": "0.15.0",
+      "sha256": "a5924018406ce0063cd67f8e008104968b74b563ee1b85dde3ed1f7cb87d3dbd",
+      "dropped": [
+        ".builds/linux.yml",
+        ".cargo_vcs_info.json",
+        ".gitignore",
+        "CHANGELOG.md",
+        "Cargo.lock",
+        "Cargo.toml.orig",
+        "doc/modifyOtherKeys-example.txt",
+        "rustfmt.toml"
+      ]
+    },
+    {
+      "name": "egui_term",
+      "version": "0.1.0",
+      "sha256": "062329a2d44c767147e2bf56ebea1aa0ca25aea5e88e74b5feb956161c827c5a",
+      "dropped": []
+    }
+  ]
+}

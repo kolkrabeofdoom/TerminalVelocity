@@ -8,4 +8,5 @@
 # Upstream terminal recordings are byte streams, including intentional CR/LF.
 *.recording binary
 *.vte binary
-
+# Patches against vendored crates are applied byte-exact (scripts/vendor-check.ps1).
+vendor/patches/*.patch -text

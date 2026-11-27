@@ -1,0 +1,1250 @@
+diff --git a/orig/src/backend/mod.rs b/vend/src/backend/mod.rs
+index 1899f48..ba7c1b8 100644
+--- a/orig/src/backend/mod.rs
++++ b/vend/src/backend/mod.rs
+@@ -140,6 +140,54 @@ pub struct TerminalBackend {
+     size: TerminalSize,
+     notifier: Notifier,
+     last_content: RenderableContent,
++    search: Option<HistorySearch>,
++}
++
++struct HistorySearch {
++    regex: RegexSearch,
++    matches: Vec<Match>,
++    active: usize,
++    truncated: bool,
++    refreshed: std::time::Instant,
++}
++
++/// Only permit standard HTTP(S) URLs with a non-empty host; block local file:// or custom schemes.
++pub fn is_safe_http_url(url: &str) -> bool {
++    if url.len() > 2048 || url.chars().any(|c| c.is_control() || c.is_whitespace()) {
++        return false;
++    }
++    url.strip_prefix("https://")
++        .or_else(|| url.strip_prefix("http://"))
++        .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/') && !rest.starts_with('\\'))
++}
++
++/// Encode clipboard text for the PTY, honoring `TermMode::BRACKETED_PASTE` (`\x1b[?2004h`)
++/// and stripping ESC/CSI/NUL control characters when bracketed so pasted content cannot
++/// prematurely terminate `\x1b[201~` or inject escape sequences.
++pub fn encode_paste(text: &str, bracketed: bool) -> Vec<u8> {
++    if bracketed {
++        let sanitized: String = text
++            .chars()
++            .filter(|&c| c != '\x1b' && c != '\u{009b}' && c != '\0')
++            .collect();
++        let mut out = Vec::with_capacity(sanitized.len() + 12);
++        out.extend_from_slice(b"\x1b[200~");
++        out.extend_from_slice(sanitized.as_bytes());
++        out.extend_from_slice(b"\x1b[201~");
++        out
++    } else {
++        text.as_bytes().to_vec()
++    }
++}
++
++fn literal_pattern(query: &str) -> String {
++    // Explicit case sensitivity avoids RegexSearch's automatic smart-case behavior.
++    let mut pattern = String::from("(?-i)");
++    for c in query.chars() {
++        if "\\.^$|?*+()[]{}".contains(c) { pattern.push('\\'); }
++        pattern.push(c);
++    }
++    pattern
+ }
+ 
+ impl TerminalBackend {
+@@ -149,9 +197,21 @@ impl TerminalBackend {
+         pty_event_proxy_sender: Sender<(u64, PtyEvent)>,
+         settings: BackendSettings,
+     ) -> Result<Self> {
++        if settings.shell.trim().is_empty() || settings.shell.contains(['"', '\0', '\r', '\n']) {
++            return Err(std::io::Error::new(
++                std::io::ErrorKind::InvalidInput,
++                "Ungültiger Programmpfad",
++            ));
++        }
++        #[cfg(windows)]
++        let program = format!("\"{}\"", settings.shell);
++        #[cfg(not(windows))]
++        let program = settings.shell;
+         let pty_config = tty::Options {
+-            shell: Some(tty::Shell::new(settings.shell, settings.args)),
++            shell: Some(tty::Shell::new(program, settings.args)),
++            escape_args: true,
+             working_directory: settings.working_directory,
++            env: settings.env,
+             ..tty::Options::default()
+         };
+         let config = term::Config::default();
+@@ -160,7 +220,9 @@ impl TerminalBackend {
+         let (event_sender, event_receiver) = mpsc::channel();
+         let event_proxy = EventProxy(event_sender);
+         let mut term = Term::new(config, &terminal_size, event_proxy.clone());
++        term.sixel.geometry(terminal_size.cell_width as usize, terminal_size.cell_height as usize);
+         let initial_content = RenderableContent {
++            sixel: Vec::new(),
+             grid: term.grid().clone(),
+             selectable_range: None,
+             terminal_mode: *term.mode(),
+@@ -172,21 +234,33 @@ impl TerminalBackend {
+         let pty_event_loop =
+             EventLoop::new(term.clone(), event_proxy, pty, false, false)?;
+         let notifier = Notifier(pty_event_loop.channel());
+-        let url_regex = RegexSearch::new(r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|https://|http://|news:|file://|git://|ssh:|ftp://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();
++        let reply_notifier = Notifier(pty_event_loop.channel());
++        let reply_term = term.clone();
++        let url_regex = RegexSearch::new(r#"(https://|http://)[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>"\s{-}\^⟨⟩`]+"#).unwrap();
+         let _pty_event_loop_thread = pty_event_loop.spawn();
+         let _pty_event_subscription = std::thread::Builder::new()
+             .name(format!("pty_event_subscription_{}", id))
+-            .spawn(move || loop {
+-                if let Ok(event) = event_receiver.recv() {
+-                    pty_event_proxy_sender
+-                        .send((id, event.clone()))
+-                        .unwrap_or_else(|_| {
+-                            panic!("pty_event_subscription_{}: sending PtyEvent is failed", id)
+-                        });
+-                    app_context.clone().request_repaint();
+-                    if let Event::Exit = event {
++            .spawn(move || {
++                while let Ok(event) = event_receiver.recv() {
++                    match &event {
++                        Event::PtyWrite(text) => reply_notifier.notify(text.clone().into_bytes()),
++                        Event::TextAreaSizeRequest(format) => {
++                            let term = reply_term.lock();
++                            let size = WindowSize {
++                                num_lines: term.screen_lines() as u16,
++                                num_cols: term.columns() as u16,
++                                cell_width: term.sixel.cell_width as u16,
++                                cell_height: term.sixel.cell_height as u16,
++                            };
++                            reply_notifier.notify(format(size).into_bytes());
++                        },
++                        _ => {},
++                    }
++                    if pty_event_proxy_sender.send((id, event.clone())).is_err() {
+                         break;
+                     }
++                    app_context.request_repaint();
++                    if let Event::Exit = event { break; }
+                 }
+             })?;
+ 
+@@ -197,6 +271,7 @@ impl TerminalBackend {
+             size: terminal_size,
+             notifier,
+             last_content: initial_content,
++            search: None,
+         })
+     }
+ 
+@@ -245,21 +320,92 @@ impl TerminalBackend {
+     }
+ 
+     pub fn selectable_content(&self) -> String {
+-        let content = self.last_content();
+-        let mut result = String::new();
+-        if let Some(range) = content.selectable_range {
+-            for indexed in content.grid.display_iter() {
+-                if range.contains(indexed.point) {
+-                    result.push(indexed.c);
+-                }
++        self.term.lock().selection_to_string().unwrap_or_default()
++    }
++
++    /// Logical text line under a pointer, with its UTF-8 byte offset.
++    pub fn text_at_pixel(&self, x: f32, y: f32) -> Option<(String, usize)> {
++        let term = self.term.lock();
++        let point = Self::selection_point(x, y, &self.size, term.grid().display_offset());
++        let first = term.line_search_left(point).line;
++        let last = term.line_search_right(point).line;
++        if last.0 - first.0 > 32 { return None; }
++        let mut text = String::new();
++        let mut offset = 0;
++        for row in first.0..=last.0 {
++            for col in 0..term.columns() {
++                let cell = &term.grid()[Line(row)][Column(col)];
++                if row == point.line.0 && col == point.column.0 { offset = text.len(); }
++                if cell.flags.contains(term::cell::Flags::WIDE_CHAR_SPACER) { continue; }
++                text.push(cell.c);
++                if let Some(extra) = cell.zerowidth() { text.extend(extra); }
+             }
+         }
+-        result
++        Some((text, offset))
++    }
++
++    /// Literal, case-sensitive search over the retained grid, including wrapped lines.
++    pub fn set_search(&mut self, query: &str) -> std::result::Result<(), String> {
++        self.search = None;
++        if query.is_empty() { return Ok(()); }
++        if query.chars().count() > 256 { return Err("Suchtext auf 256 Zeichen kürzen.".into()); }
++        let regex = RegexSearch::new(&literal_pattern(query)).map_err(|e| e.to_string())?;
++        self.search = Some(HistorySearch { regex, matches: vec![], active: 0, truncated: false, refreshed: std::time::Instant::now() });
++        self.refresh_search();
++        if let Some(search) = &mut self.search {
++            let term = self.term.lock();
++            let top = Line(-(term.grid().display_offset() as i32));
++            search.active = search.matches.iter().position(|m| m.start().line >= top).unwrap_or(search.matches.len().saturating_sub(1));
++        }
++        self.reveal_search();
++        Ok(())
++    }
++
++    pub fn refresh_search(&mut self) {
++        let Some(search) = &mut self.search else { return; };
++        let term = self.term.lock();
++        let start = Point::new(term.topmost_line(), Column(0));
++        let end = Point::new(term.bottommost_line(), term.last_column());
++        search.matches = RegexIter::new(start, end, Direction::Right, &*term, &mut search.regex).take(10_001).collect();
++        search.truncated = search.matches.len() > 10_000;
++        search.matches.truncate(10_000);
++        search.active = search.active.min(search.matches.len().saturating_sub(1));
++        search.refreshed = std::time::Instant::now();
++    }
++
++    fn reveal_search(&mut self) {
++        if let Some(range) = self.search.as_ref().and_then(|s| s.matches.get(s.active)).cloned() {
++            let mut term = self.term.lock();
++            term.scroll_to_point(*range.end());
++            term.scroll_to_point(*range.start());
++        }
++    }
++
++    pub fn next_search_match(&mut self, backwards: bool) {
++        self.refresh_search();
++        if let Some(search) = &mut self.search {
++            let len = search.matches.len();
++            if len > 0 { search.active = if backwards { (search.active + len - 1) % len } else { (search.active + 1) % len }; }
++        }
++        self.reveal_search();
++    }
++
++    pub fn search_status(&self) -> (usize, usize, bool) {
++        self.search.as_ref().map(|s| (if s.matches.is_empty() { 0 } else { s.active + 1 }, s.matches.len(), s.truncated)).unwrap_or((0, 0, false))
++    }
++
++    /// Binary search keeps rendering independent of the total number of matches.
++    pub fn search_highlight(&self, point: Point) -> Option<bool> {
++        let search = self.search.as_ref()?;
++        let index = search.matches.partition_point(|m| m.start() <= &point).checked_sub(1)?;
++        search.matches[index].contains(&point).then_some(index == search.active)
+     }
+ 
+     pub fn sync(&mut self) -> &RenderableContent {
++        if self.search.as_ref().is_some_and(|s| s.refreshed.elapsed() >= std::time::Duration::from_millis(300)) { self.refresh_search(); }
+         let term = self.term.clone();
+         let mut terminal = term.lock();
++        self.last_content.sixel = terminal.sixel.active.tiles.clone();
+         let selectable_range = match &terminal.selection {
+             Some(s) => s.to_range(&terminal),
+             None => None,
+@@ -278,6 +424,26 @@ impl TerminalBackend {
+         &self.last_content
+     }
+ 
++    pub fn set_sixel_enabled(&mut self, enabled: bool) {
++        self.term.lock().set_sixel_enabled(enabled);
++    }
++
++    pub fn image_width(&self) -> usize {
++        let term = self.term.lock();
++        term.columns() * term.sixel.cell_width
++    }
++
++    pub fn display_rgba(&mut self, width: usize, height: usize, rgba: Vec<u8>) -> Result<()> {
++        self.term.lock().display_rgba(width, height, rgba)
++            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
++    }
++
++    pub fn sixel_status(&self) -> (usize, u64) {
++        let term = self.term.lock();
++        let ids: std::collections::BTreeSet<_> = term.sixel.active.tiles.iter().map(|t| t.image.id).collect();
++        (ids.len(), term.sixel.rejected)
++    }
++
+     fn process_link_action(
+         &mut self,
+         terminal: &Term<EventProxy>,
+@@ -314,9 +480,9 @@ impl TerminalBackend {
+                 }
+             }
+ 
+-            open::that(url).unwrap_or_else(|_| {
+-                panic!("link opening is failed");
+-            })
++            if is_safe_http_url(&url) {
++                let _ = open::that(url);
++            }
+         }
+     }
+ 
+@@ -472,6 +638,7 @@ impl TerminalBackend {
+             };
+ 
+             self.notifier.on_resize(self.size.into());
++            terminal.sixel.geometry(self.size.cell_width as usize, self.size.cell_height as usize);
+             terminal.resize(TermSize::new(
+                 self.size.num_cols as usize,
+                 self.size.num_lines as usize,
+@@ -540,6 +707,7 @@ fn visible_regex_match_iter<'a>(
+ }
+ 
+ pub struct RenderableContent {
++    pub sixel: Vec<alacritty_terminal::sixel::Tile>,
+     pub grid: Grid<Cell>,
+     pub hovered_hyperlink: Option<RangeInclusive<Point>>,
+     pub selectable_range: Option<SelectionRange>,
+@@ -551,6 +719,7 @@ pub struct RenderableContent {
+ impl Default for RenderableContent {
+     fn default() -> Self {
+         Self {
++            sixel: Vec::new(),
+             grid: Grid::new(0, 0, 0),
+             hovered_hyperlink: None,
+             selectable_range: None,
+diff --git a/orig/src/backend/settings.rs b/vend/src/backend/settings.rs
+index 3c58f8e..ca534c5 100644
+--- a/orig/src/backend/settings.rs
++++ b/vend/src/backend/settings.rs
+@@ -1,4 +1,4 @@
+-use std::path::PathBuf;
++use std::{collections::HashMap, path::PathBuf};
+ 
+ const DEFAULT_SHELL: &str = "/bin/bash";
+ 
+@@ -7,6 +7,8 @@ pub struct BackendSettings {
+     pub shell: String,
+     pub args: Vec<String>,
+     pub working_directory: Option<PathBuf>,
++    /// Extra environment variables for the child process.
++    pub env: HashMap<String, String>,
+ }
+ 
+ impl Default for BackendSettings {
+@@ -15,6 +17,7 @@ impl Default for BackendSettings {
+             shell: DEFAULT_SHELL.to_string(),
+             args: vec![],
+             working_directory: None,
++            env: HashMap::new(),
+         }
+     }
+ }
+diff --git a/orig/src/bindings.rs b/vend/src/bindings.rs
+index b4c20a9..10b35c7 100644
+--- a/orig/src/bindings.rs
++++ b/vend/src/bindings.rs
+@@ -223,7 +223,7 @@ fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
+         R,            Modifiers::CTRL; BindingAction::Char('\x12');
+         S,            Modifiers::CTRL; BindingAction::Char('\x13');
+         T,            Modifiers::CTRL; BindingAction::Char('\x14');
+-        U,            Modifiers::CTRL; BindingAction::Char('\x51');
++        U,            Modifiers::CTRL; BindingAction::Char('\x15');
+         V,            Modifiers::CTRL; BindingAction::Char('\x16');
+         W,            Modifiers::CTRL; BindingAction::Char('\x17');
+         X,            Modifiers::CTRL; BindingAction::Char('\x18');
+@@ -291,7 +291,7 @@ fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
+         R,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x12');
+         S,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x13');
+         T,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x14');
+-        U,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x51');
++        U,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x15');
+         V,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x16');
+         W,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x17');
+         X,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x18');
+@@ -351,6 +351,32 @@ mod tests {
+     use crate::TerminalMode;
+     use egui::{Key, Modifiers, PointerButton};
+ 
++    /// TerminalVelocity: Ctrl+<letter> must send the matching C0 control code
++    /// (Ctrl+U was 0x51 'Q' instead of 0x15 NAK, upstream fix #43).
++    #[test]
++    fn ctrl_letters_send_matching_control_codes() {
++        let layout = BindingsLayout::default();
++        let keys = [
++            Key::A, Key::B, Key::C, Key::D, Key::E, Key::F, Key::G, Key::H, Key::I,
++            Key::J, Key::K, Key::L, Key::M, Key::N, Key::O, Key::P, Key::Q, Key::R,
++            Key::S, Key::T, Key::U, Key::V, Key::W, Key::X, Key::Y, Key::Z,
++        ];
++        for (index, key) in keys.into_iter().enumerate() {
++            let expected = char::from(index as u8 + 1);
++            for modifiers in [Modifiers::CTRL, Modifiers::CTRL | Modifiers::SHIFT] {
++                let action =
++                    layout.get_action(InputKind::KeyCode(key), modifiers, TerminalMode::empty());
++                if let BindingAction::Char(sent) = action {
++                    assert_eq!(sent, expected, "{key:?} with {modifiers:?}");
++                }
++            }
++        }
++        assert_eq!(
++            layout.get_action(InputKind::KeyCode(Key::U), Modifiers::CTRL, TerminalMode::empty()),
++            BindingAction::Char('\x15')
++        );
++    }
++
+     #[test]
+     fn add_new_custom_keyboard_binding() {
+         let mut current_layout = BindingsLayout::default();
+diff --git a/vend/src/effects.rs b/vend/src/effects.rs
+new file mode 100644
+index 0000000..2085779
+--- /dev/null
++++ b/vend/src/effects.rs
+@@ -0,0 +1,523 @@
++use egui::{Color32, Painter, Pos2, Rect, Stroke, Vec2};
++
++#[derive(Clone, Copy, Debug)]
++pub struct BackgroundImage {
++    pub texture: egui::TextureId,
++    pub size: Vec2,
++    pub cover: bool,
++    pub darkness: f32,
++}
++impl BackgroundImage {
++    pub fn geometry(self, bounds: Rect) -> (Rect, Rect) {
++        let mut uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
++        let source = self.size.x / self.size.y.max(1.0);
++        let target = bounds.width() / bounds.height().max(1.0);
++        if self.cover {
++            if source > target {
++                let half = target / source * 0.5;
++                uv.min.x = 0.5 - half;
++                uv.max.x = 0.5 + half;
++            } else {
++                let half = source / target * 0.5;
++                uv.min.y = 0.5 - half;
++                uv.max.y = 0.5 + half;
++            }
++            (bounds, uv)
++        } else {
++            let scale =
++                (bounds.width() / self.size.x.max(1.0)).min(bounds.height() / self.size.y.max(1.0));
++            (
++                Rect::from_center_size(bounds.center(), self.size * scale),
++                uv,
++            )
++        }
++    }
++    pub fn paint(self, painter: &Painter, bounds: Rect) {
++        if !bounds.is_positive() {
++            return;
++        }
++        let (rect, uv) = self.geometry(bounds);
++        let painter = painter.with_clip_rect(bounds.intersect(painter.clip_rect()));
++        painter.image(self.texture, rect, uv, Color32::WHITE);
++        painter.rect_filled(
++            rect,
++            0.0,
++            Color32::from_black_alpha((self.darkness.clamp(0.0, 1.0) * 255.0).round() as u8),
++        );
++    }
++}
++
++/// Optional decoration only: never modifies terminal cells or input handling.
++#[derive(Clone, Copy, Debug)]
++pub struct VisualEffects {
++    /// 0 = off, 1 = Aurora, 2 = Phosphor, 3 = Deep Space.
++    pub preset: u8,
++    pub intensity: f32,
++    pub animations: bool,
++    pub cursor_trail: bool,
++    pub amber: bool,
++    pub text_afterglow: bool,
++    pub afterglow_strength: f32,
++    pub afterglow_duration: f32,
++}
++
++impl Default for VisualEffects {
++    fn default() -> Self {
++        Self {
++            preset: 0,
++            intensity: 0.4,
++            animations: false,
++            cursor_trail: false,
++            amber: false,
++            text_afterglow: false,
++            afterglow_strength: 0.5,
++            afterglow_duration: 0.6,
++        }
++    }
++}
++
++impl VisualEffects {
++    pub fn strength(self) -> f32 {
++        if self.preset == 0 || !self.intensity.is_finite() {
++            0.0
++        } else {
++            self.intensity.clamp(0.0, 1.0)
++        }
++    }
++    pub fn accent(self) -> Color32 {
++        match self.preset {
++            2 if self.amber => Color32::from_rgb(255, 190, 85),
++            2 => Color32::from_rgb(115, 245, 155),
++            3 => Color32::from_rgb(150, 170, 255),
++            _ => Color32::from_rgb(85, 225, 210),
++        }
++    }
++    pub fn animated(self) -> bool {
++        self.strength() > 0.0 && self.animations
++    }
++    pub fn paint_background(self, painter: &Painter, rect: Rect, time: f64) {
++        let strength = self.strength();
++        if strength == 0.0 || !rect.is_positive() {
++            return;
++        }
++        let t = if self.animations {
++            (time % 3600.0) as f32
++        } else {
++            0.0
++        };
++        let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
++        match self.preset {
++            1 => {
++                // Bounded mesh, no framebuffer copies or per-cell effects.
++                for band in 0..3 {
++                    let mut mesh = egui::Mesh::default();
++                    for step in 0..=48 {
++                        let u = step as f32 / 48.0;
++                        let x = rect.left() + rect.width() * u;
++                        let y = rect.top()
++                            + rect.height()
++                                * (0.22
++                                    + band as f32 * 0.25
++                                    + 0.12 * (u * 6.0 + t * 0.16 + band as f32).sin());
++                        let color = if band == 1 {
++                            Color32::from_rgba_unmultiplied(140, 85, 230, (32.0 * strength) as u8)
++                        } else {
++                            Color32::from_rgba_unmultiplied(45, 210, 185, (30.0 * strength) as u8)
++                        };
++                        for (offset, color) in [
++                            (-rect.height() * 0.18, Color32::TRANSPARENT),
++                            (0.0, color),
++                            (rect.height() * 0.18, Color32::TRANSPARENT),
++                        ] {
++                            mesh.colored_vertex(Pos2::new(x, y + offset), color);
++                        }
++                        if step > 0 {
++                            let a = (step - 1) * 3;
++                            for row in 0..2 {
++                                mesh.add_triangle(a + row, a + row + 3, a + row + 1);
++                                mesh.add_triangle(a + row + 1, a + row + 3, a + row + 4);
++                            }
++                        }
++                    }
++                    painter.add(egui::Shape::mesh(mesh));
++                }
++            }
++            2 => {
++                // Scanlines stay behind glyphs and selection/search backgrounds.
++                let color = self.accent().gamma_multiply(0.07 * strength);
++                let count = (rect.height() / 4.0).ceil().min(600.0) as usize;
++                for i in 0..count {
++                    let y = rect.top() + i as f32 * 4.0;
++                    painter.line_segment(
++                        [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
++                        Stroke::new(0.7_f32, color),
++                    );
++                }
++                painter.rect_filled(rect, 0.0, self.accent().gamma_multiply(0.025 * strength));
++            }
++            3 => {
++                for i in 0..55 {
++                    let u = ((i * 137 + 29) % 997) as f32 / 997.0;
++                    let v = (((i * 263 + 71) % 991) as f32 / 991.0
++                        + t * (0.001 + (i % 3) as f32 * 0.0003))
++                        .fract();
++                    let center = rect.min + Vec2::new(u * rect.width(), v * rect.height());
++                    let radius = if i % 7 == 0 { 1.5 } else { 0.7 };
++                    painter.circle_filled(
++                        center,
++                        radius * 3.0,
++                        self.accent().gamma_multiply(0.04 * strength),
++                    );
++                    painter.circle_filled(
++                        center,
++                        radius,
++                        self.accent().gamma_multiply(0.38 * strength),
++                    );
++                }
++            }
++            _ => {}
++        }
++    }
++}
++
++/// Only current glyphs are retained. Erasure immediately removes their light.
++#[derive(Clone, Default)]
++pub(crate) struct TextAfterglow {
++    previous: std::collections::BTreeMap<(i32, usize), char>,
++    lit: std::collections::BTreeMap<(i32, usize), f64>,
++    geometry: Option<(Rect, egui::FontId, usize, usize, bool)>,
++    last_time: Option<f64>,
++}
++
++#[derive(Clone)]
++pub(crate) struct GlowGlyph {
++    pub key: (i32, usize),
++    pub character: char,
++    pub position: Pos2,
++}
++
++impl TextAfterglow {
++    pub(crate) fn update(
++        &mut self,
++        glyphs: &[GlowGlyph],
++        geometry: (Rect, egui::FontId, usize, usize, bool),
++        time: f64,
++        enabled: bool,
++        duration: f32,
++    ) {
++        if !enabled || glyphs.len() > 8192 || !time.is_finite() {
++            *self = Self::default();
++            return;
++        }
++        let stable = self.geometry.as_ref() == Some(&geometry)
++            && self.last_time.is_some_and(|last| time >= last);
++        self.geometry = Some(geometry);
++        self.last_time = Some(time);
++        let current: std::collections::BTreeMap<_, _> = glyphs
++            .iter()
++            .map(|glyph| (glyph.key, glyph.character))
++            .collect();
++        if !stable {
++            self.lit.clear();
++        } else {
++            self.lit
++                .retain(|key, born| current.contains_key(key) && time - *born < duration as f64);
++            for (key, character) in &current {
++                if self.previous.get(key) != Some(character) {
++                    // Bounded work even for full-screen output bursts.
++                    if self.lit.len() < 512 || self.lit.contains_key(key) {
++                        self.lit.insert(*key, time);
++                    }
++                }
++            }
++        }
++        self.previous = current;
++    }
++
++    pub(crate) fn paint(
++        &self,
++        painter: &Painter,
++        glyphs: &[GlowGlyph],
++        time: f64,
++        effects: VisualEffects,
++    ) {
++        let Some((bounds, font, ..)) = &self.geometry else {
++            return;
++        };
++        let painter = painter.with_clip_rect(bounds.intersect(painter.clip_rect()));
++        for glyph in glyphs {
++            if let Some(born) = self.lit.get(&glyph.key) {
++                let fade = (1.0 - ((time - born) / effects.afterglow_duration as f64) as f32)
++                    .clamp(0.0, 1.0)
++                    .powi(2);
++                let color = effects
++                    .accent()
++                    .gamma_multiply(0.22 * effects.strength() * effects.afterglow_strength * fade);
++                for offset in [
++                    Vec2::new(-1.0, 0.0),
++                    Vec2::new(1.0, 0.0),
++                    Vec2::new(0.0, -1.0),
++                    Vec2::new(0.0, 1.0),
++                ] {
++                    painter.text(
++                        glyph.position + offset,
++                        egui::Align2::CENTER_TOP,
++                        glyph.character,
++                        font.clone(),
++                        color,
++                    );
++                }
++            }
++        }
++        if !self.lit.is_empty() {
++            painter
++                .ctx()
++                .request_repaint_after(std::time::Duration::from_millis(50));
++        }
++    }
++}
++
++#[derive(Clone, Default)]
++pub(crate) struct CursorTrail {
++    last: Option<Rect>,
++    layout: Option<Rect>,
++    scroll: usize,
++    samples: Vec<(Rect, f64)>,
++}
++
++impl CursorTrail {
++    #[allow(clippy::too_many_arguments)]
++    pub(crate) fn paint(
++        &mut self,
++        painter: &Painter,
++        cursor: Option<Rect>,
++        bounds: Rect,
++        scroll: usize,
++        time: f64,
++        effects: VisualEffects,
++        active: bool,
++    ) {
++        let stable = self.layout == Some(bounds) && self.scroll == scroll;
++        self.layout = Some(bounds);
++        self.scroll = scroll;
++        if !active || cursor.is_none() || !stable || !effects.animated() || !effects.cursor_trail {
++            self.samples.clear();
++            self.last = cursor;
++        } else if self.last != cursor {
++            if let Some(previous) = self.last {
++                self.samples.push((previous, time));
++                if self.samples.len() > 12 {
++                    self.samples.remove(0);
++                }
++            }
++            self.last = cursor;
++        }
++        self.samples
++            .retain(|(_, born)| time >= *born && time - *born < 0.32);
++        let painter = painter.with_clip_rect(bounds.intersect(painter.clip_rect()));
++        for (rect, born) in &self.samples {
++            let fade = (1.0 - ((time - born) / 0.32) as f32).powi(2);
++            painter.rect_filled(
++                *rect,
++                2.0,
++                effects
++                    .accent()
++                    .gamma_multiply(0.30 * effects.strength() * fade),
++            );
++            if let Some(current) = cursor {
++                // Short trails only; no neon slash across an entire split pane.
++                if current.center().distance(rect.center()) < 160.0 {
++                    painter.line_segment(
++                        [rect.center(), current.center()],
++                        Stroke::new(
++                            2.0_f32,
++                            effects
++                                .accent()
++                                .gamma_multiply(0.15 * effects.strength() * fade),
++                        ),
++                    );
++                }
++            }
++        }
++        if active && effects.strength() > 0.0 {
++            if let Some(cursor) = cursor {
++                for spread in [6.0, 3.0, 1.5] {
++                    painter.rect_stroke(
++                        cursor.expand(spread),
++                        3.0,
++                        Stroke::new(
++                            1.5_f32,
++                            effects.accent().gamma_multiply(0.10 * effects.strength()),
++                        ),
++                        egui::StrokeKind::Inside,
++                    );
++                }
++            }
++        }
++        if !self.samples.is_empty() {
++            painter
++                .ctx()
++                .request_repaint_after(std::time::Duration::from_millis(33));
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn text_afterglow_tracks_changes_erasure_expiry_and_resets() {
++        let mut glow = TextAfterglow::default();
++        let geometry = (
++            Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0)),
++            egui::FontId::monospace(14.0),
++            0,
++            0,
++            false,
++        );
++        let glyph = |character| GlowGlyph {
++            key: (0, 0),
++            character,
++            position: Pos2::new(8.0, 8.0),
++        };
++        glow.update(&[glyph('a')], geometry.clone(), 0.0, true, 0.6);
++        assert!(glow.lit.is_empty()); // Opening an existing viewport does not flash.
++        glow.update(&[glyph('b')], geometry.clone(), 10.0, true, 0.6);
++        assert_eq!(glow.lit.len(), 1); // Also after an idle interval.
++        glow.update(&[glyph('b')], geometry.clone(), 10.3, true, 0.6);
++        assert_eq!(glow.lit[&(0, 0)], 10.0); // Stable text does not renew its light.
++        glow.update(&[glyph('b')], geometry.clone(), 10.7, true, 0.6);
++        assert!(glow.lit.is_empty());
++        glow.update(&[glyph('c')], geometry.clone(), 10.8, true, 0.6);
++        glow.update(&[], geometry.clone(), 10.9, true, 0.6);
++        assert!(glow.lit.is_empty());
++        for changed in [
++            (geometry.0.shrink(1.0), geometry.1.clone(), 0, 0, false),
++            (geometry.0, egui::FontId::monospace(16.0), 0, 0, false),
++            (geometry.0, geometry.1.clone(), 1, 0, false),
++            (geometry.0, geometry.1.clone(), 0, 1, false),
++            (geometry.0, geometry.1.clone(), 0, 0, true),
++        ] {
++            glow.update(&[glyph('a')], geometry.clone(), 11.0, true, 0.6);
++            glow.update(&[glyph('b')], geometry.clone(), 11.1, true, 0.6);
++            glow.update(&[glyph('c')], changed, 11.2, true, 0.6);
++            assert!(glow.lit.is_empty());
++        }
++        glow.update(&[glyph('d')], geometry.clone(), 12.0, false, 0.6);
++        assert!(glow.previous.is_empty());
++        assert!(glow.geometry.is_none());
++        let many: Vec<_> = (0..1000)
++            .map(|i| GlowGlyph {
++                key: (0, i),
++                ..glyph('x')
++            })
++            .collect();
++        glow.update(&[], geometry.clone(), 13.0, true, 0.6);
++        glow.update(&many, geometry.clone(), 13.1, true, 0.6);
++        assert_eq!(glow.lit.len(), 512);
++        let oversized: Vec<_> = (0..8193)
++            .map(|i| GlowGlyph {
++                key: (0, i),
++                ..glyph('x')
++            })
++            .collect();
++        glow.update(&oversized, geometry, 13.2, true, 0.6);
++        assert!(glow.previous.is_empty());
++    }
++
++    #[test]
++    fn text_afterglow_paints_clipped_and_stops_after_expiry() {
++        let ctx = egui::Context::default();
++        let bounds = Rect::from_min_size(Pos2::ZERO, Vec2::splat(100.0));
++        let font = egui::FontId::monospace(14.0);
++        let geometry = (bounds, font, 0, 0, false);
++        let glyphs = [GlowGlyph {
++            key: (0, 0),
++            character: 'X',
++            position: Pos2::new(10.0, 10.0),
++        }];
++        let mut glow = TextAfterglow::default();
++        glow.update(&[], geometry.clone(), 0.0, true, 0.6);
++        glow.update(&glyphs, geometry.clone(), 0.1, true, 0.6);
++        let effects = VisualEffects {
++            preset: 2,
++            ..VisualEffects::default()
++        };
++        let output = ctx.run(egui::RawInput::default(), |ctx| {
++            glow.paint(
++                &ctx.layer_painter(egui::LayerId::background()),
++                &glyphs,
++                0.1,
++                effects,
++            );
++        });
++        assert_eq!(output.shapes.len(), 4);
++        assert!(output.shapes.iter().all(|shape| shape.clip_rect == bounds));
++        glow.update(&glyphs, geometry, 1.0, true, 0.6);
++        let output = ctx.run(egui::RawInput::default(), |ctx| {
++            glow.paint(
++                &ctx.layer_painter(egui::LayerId::background()),
++                &glyphs,
++                1.0,
++                effects,
++            );
++        });
++        assert!(output.shapes.is_empty());
++    }
++    #[test]
++    fn trail_expires_is_bounded_and_resets_on_scroll_focus_and_layout() {
++        let ctx = egui::Context::default();
++        let mut trail = CursorTrail::default();
++        let bounds = Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0));
++        let effects = VisualEffects {
++            preset: 1,
++            animations: true,
++            cursor_trail: true,
++            ..VisualEffects::default()
++        };
++        let cursor = |x| {
++            Some(Rect::from_min_size(
++                Pos2::new(x, 20.0),
++                Vec2::new(9.0, 18.0),
++            ))
++        };
++        let _ = ctx.run(egui::RawInput::default(), |ctx| {
++            let painter = ctx.layer_painter(egui::LayerId::background());
++            trail.paint(&painter, cursor(10.0), bounds, 0, 0.0, effects, true);
++            for i in 1..30 {
++                trail.paint(
++                    &painter,
++                    cursor(10.0 + i as f32),
++                    bounds,
++                    0,
++                    i as f64 * 0.001,
++                    effects,
++                    true,
++                );
++            }
++            assert_eq!(trail.samples.len(), 12);
++            trail.paint(&painter, cursor(39.0), bounds, 0, 1.0, effects, true);
++            assert!(trail.samples.is_empty());
++            trail.paint(&painter, cursor(40.0), bounds, 0, 1.01, effects, true);
++            assert_eq!(trail.samples.len(), 1);
++            trail.paint(&painter, cursor(41.0), bounds, 1, 1.02, effects, true);
++            assert!(trail.samples.is_empty());
++            trail.paint(&painter, cursor(42.0), bounds, 1, 1.03, effects, true);
++            trail.paint(&painter, cursor(43.0), bounds, 1, 1.04, effects, false);
++            assert!(trail.samples.is_empty());
++            trail.paint(&painter, cursor(44.0), bounds, 1, 1.05, effects, true);
++            trail.paint(
++                &painter,
++                cursor(45.0),
++                bounds.shrink(10.0),
++                1,
++                1.06,
++                effects,
++                true,
++            );
++            assert!(trail.samples.is_empty());
++            trail.paint(&painter, None, bounds, 1, 1.07, effects, true);
++            assert!(trail.last.is_none());
++        });
++    }
++}
+diff --git a/orig/src/lib.rs b/vend/src/lib.rs
+index 20cbcd3..8aa9b5b 100644
+--- a/orig/src/lib.rs
++++ b/vend/src/lib.rs
+@@ -6,8 +6,14 @@ mod types;
+ mod view;
+ 
+ pub use backend::settings::BackendSettings;
+-pub use backend::{BackendCommand, PtyEvent, TerminalBackend, TerminalMode};
++pub use backend::{
++    encode_paste, is_safe_http_url, BackendCommand, PtyEvent, SelectionType, TerminalBackend,
++    TerminalMode,
++};
+ pub use bindings::{Binding, BindingAction, InputKind, KeyboardBinding};
+ pub use font::{FontSettings, TerminalFont};
+ pub use theme::{ColorPalette, TerminalTheme};
+ pub use view::TerminalView;
++
++mod effects;
++pub use effects::{VisualEffects, BackgroundImage};
+diff --git a/orig/src/view.rs b/vend/src/view.rs
+index 903149a..1676830 100644
+--- a/orig/src/view.rs
++++ b/vend/src/view.rs
+@@ -3,12 +3,12 @@ use alacritty_terminal::term::cell;
+ use alacritty_terminal::term::TermMode;
+ use alacritty_terminal::vte::ansi::{Color, NamedColor};
+ use egui::epaint::RectShape;
+-use egui::{CornerRadius, Key};
+-use egui::Modifiers;
+ use egui::MouseWheelUnit;
+ use egui::Shape;
+ use egui::Widget;
+ use egui::{Align2, Painter, Pos2, Rect, Response, Stroke, Vec2};
++use egui::{Color32, Modifiers};
++use egui::{CornerRadius, Key};
+ use egui::{Id, PointerButton};
+ 
+ use crate::backend::BackendCommand;
+@@ -31,12 +31,17 @@ enum InputAction {
+ 
+ #[derive(Clone, Default)]
+ pub struct TerminalViewState {
++    sixel_textures: std::collections::HashMap<u64, egui::TextureHandle>,
+     is_dragged: bool,
++    trail: crate::effects::CursorTrail,
++    afterglow: crate::effects::TextAfterglow,
+     scroll_pixels: f32,
+     current_mouse_position_on_grid: TerminalGridPoint,
+ }
+ 
+ pub struct TerminalView<'a> {
++    background_image: Option<crate::effects::BackgroundImage>,
++    effects: crate::effects::VisualEffects,
+     widget_id: Id,
+     has_focus: bool,
+     size: Vec2,
+@@ -76,6 +81,8 @@ impl<'a> TerminalView<'a> {
+         ));
+ 
+         Self {
++            background_image: None,
++            effects: crate::effects::VisualEffects::default(),
+             widget_id,
+             has_focus: false,
+             size: ui.available_size(),
+@@ -87,6 +94,22 @@ impl<'a> TerminalView<'a> {
+     }
+ 
+     #[inline]
++    pub fn set_background_image(
++        mut self,
++        image: Option<crate::effects::BackgroundImage>,
++    ) -> Self {
++        self.background_image = image;
++        self
++    }
++
++    pub fn set_effects(
++        mut self,
++        effects: crate::effects::VisualEffects,
++    ) -> Self {
++        self.effects = effects;
++        self
++    }
++
+     pub fn set_theme(mut self, theme: TerminalTheme) -> Self {
+         self.theme = theme;
+         self
+@@ -143,13 +166,23 @@ impl<'a> TerminalView<'a> {
+         layout: &Response,
+         state: &mut TerminalViewState,
+     ) -> Self {
+-        if !layout.has_focus() || !layout.contains_pointer() {
++        if !layout.has_focus() {
+             return self;
+         }
+ 
+         let modifiers = layout.ctx.input(|i| i.modifiers);
+         let events = layout.ctx.input(|i| i.events.clone());
+         for event in events {
++            if !layout.contains_pointer()
++                && matches!(
++                    event,
++                    egui::Event::MouseWheel { .. }
++                        | egui::Event::PointerButton { .. }
++                        | egui::Event::PointerMoved(_)
++                )
++            {
++                continue;
++            }
+             let mut input_actions = vec![];
+ 
+             match event {
+@@ -221,7 +254,8 @@ impl<'a> TerminalView<'a> {
+         layout: &Response,
+         painter: &Painter,
+     ) {
+-        let content = self.backend.sync();
++        self.backend.sync();
++        let content = self.backend.last_content();
+         let layout_min = layout.rect.min;
+         let layout_max = layout.rect.max;
+         let cell_height = content.terminal_size.cell_height as f32;
+@@ -229,10 +263,74 @@ impl<'a> TerminalView<'a> {
+         let global_bg =
+             self.theme.get_color(Color::Named(NamedColor::Background));
+ 
++        let time = layout.ctx.input(|i| i.time);
++        let window_focused = layout.ctx.input(|i| i.focused);
++        let active = self.has_focus && window_focused;
++        let mut effects = self.effects;
++        effects.animations &= active;
++        if let Some(image) = self.background_image {
++            image.paint(painter, layout.rect);
++        }
++        effects.paint_background(painter, layout.rect, time);
++        let mut visible_images = std::collections::HashSet::new();
++        let image_painter = painter.with_clip_rect(layout.rect.intersect(painter.clip_rect()));
++        for tile in &content.sixel {
++            let y = (tile.line + content.grid.display_offset() as i32) as f32 * cell_height;
++            let destination = Rect::from_min_size(layout_min + Vec2::new(tile.x as f32, y), Vec2::new(tile.width as f32, tile.height as f32));
++            if !destination.intersects(layout.rect) { continue; }
++            visible_images.insert(tile.image.id);
++            let texture = state.sixel_textures.entry(tile.image.id).or_insert_with(|| {
++                painter.ctx().load_texture(format!("sixel-{}", tile.image.id),
++                    egui::ColorImage::from_rgba_unmultiplied([tile.image.width, tile.image.height], &tile.image.rgba), egui::TextureOptions::NEAREST)
++            });
++            let uv = Rect::from_min_max(
++                Pos2::new(tile.source_x as f32 / tile.image.width as f32, tile.source_y as f32 / tile.image.height as f32),
++                Pos2::new((tile.source_x + tile.width) as f32 / tile.image.width as f32, (tile.source_y + tile.height) as f32 / tile.image.height as f32));
++            image_painter.image(texture.id(), destination, uv, Color32::WHITE);
++        }
++        state.sixel_textures.retain(|id, _| visible_images.contains(id));
++        if effects.animated() && matches!(effects.preset, 1 | 3) {
++            layout
++                .ctx
++                .request_repaint_after(std::time::Duration::from_millis(50));
++        }
++        let point = content.grid.cursor.point;
++        let line = point.line.0 + content.grid.display_offset() as i32;
++        let cursor_rect = Rect::from_min_size(
++            Pos2::new(
++                layout_min.x + point.column.0 as f32 * cell_width,
++                layout_min.y + line as f32 * cell_height,
++            ),
++            Vec2::new(cell_width, cell_height),
++        );
++        let cursor_visible =
++            content.terminal_mode.contains(TermMode::SHOW_CURSOR)
++                && layout.rect.contains_rect(cursor_rect);
++        state.trail.paint(
++            painter,
++            cursor_visible.then_some(cursor_rect),
++            layout.rect,
++            content.grid.display_offset(),
++            time,
++            effects,
++            active,
++        );
++
++        let enabled = active
++            && effects.preset == 2
++            && effects.animated()
++            && effects.text_afterglow
++            && effects.afterglow_strength.is_finite()
++            && effects.afterglow_strength > 0.0
++            && effects.afterglow_duration.is_finite()
++            && effects.afterglow_duration >= 0.1
++            && content.selectable_range.is_none()
++            && self.backend.search_status().1 == 0;
++        let mut glow_glyphs = Vec::new();
+         let mut shapes = vec![Shape::Rect(RectShape::filled(
+             Rect::from_min_max(layout_min, layout_max),
+             CornerRadius::ZERO,
+-            global_bg,
++            Color32::TRANSPARENT,
+         ))];
+ 
+         for indexed in content.grid.display_iter() {
+@@ -279,6 +377,19 @@ impl<'a> TerminalView<'a> {
+                 std::mem::swap(&mut fg, &mut bg);
+             }
+ 
++            if !is_selected {
++                if let Some(active) =
++                    self.backend.search_highlight(indexed.point)
++                {
++                    bg = if active {
++                        Color32::from_rgb(245, 155, 45)
++                    } else {
++                        Color32::from_rgb(215, 200, 85)
++                    };
++                    fg = Color32::BLACK;
++                }
++            }
++
+             if global_bg != bg {
+                 shapes.push(Shape::Rect(RectShape::filled(
+                     Rect::from_min_size(
+@@ -304,8 +415,12 @@ impl<'a> TerminalView<'a> {
+             }
+ 
+             // Handle cursor rendering
+-            if content.grid.cursor.point == indexed.point {
+-                let cursor_color = self.theme.get_color(content.cursor.fg);
++            if cursor_visible && content.grid.cursor.point == indexed.point {
++                let cursor_color = if effects.strength() > 0.0 {
++                    effects.accent()
++                } else {
++                    self.theme.get_color(content.cursor.fg)
++                };
+                 shapes.push(Shape::Rect(RectShape::filled(
+                     Rect::from_min_size(
+                         Pos2::new(x, y),
+@@ -318,8 +433,21 @@ impl<'a> TerminalView<'a> {
+ 
+             // Draw text content
+             if indexed.c != ' ' && indexed.c != '\t' {
+-                if content.grid.cursor.point == indexed.point
+-                    && is_app_cursor_mode
++                if enabled
++                    && glow_glyphs.len() < 8193
++                    && !flags.intersects(cell::Flags::HIDDEN)
++                    && !(cursor_visible
++                        && content.grid.cursor.point == indexed.point)
++                {
++                    glow_glyphs.push(crate::effects::GlowGlyph {
++                        key: (line_num, indexed.point.column.0),
++                        character: indexed.c,
++                        position: Pos2::new(x + cell_width / 2.0, y),
++                    });
++                }
++                if cursor_visible
++                    && content.grid.cursor.point == indexed.point
++                    && (is_app_cursor_mode || effects.strength() > 0.0)
+                 {
+                     std::mem::swap(&mut fg, &mut bg);
+                 }
+@@ -338,6 +466,22 @@ impl<'a> TerminalView<'a> {
+             }
+         }
+ 
++        state.afterglow.update(
++            &glow_glyphs,
++            (
++                layout.rect,
++                self.font.font_type(),
++                content.grid.display_offset(),
++                alacritty_terminal::grid::Dimensions::history_size(
++                    &content.grid,
++                ),
++                content.terminal_mode.contains(TermMode::ALT_SCREEN),
++            ),
++            time,
++            enabled,
++            effects.afterglow_duration,
++        );
++        state.afterglow.paint(painter, &glow_glyphs, time, effects);
+         painter.extend(shapes);
+     }
+ }
+@@ -352,19 +496,25 @@ fn process_keyboard_event(
+         egui::Event::Text(text) => {
+             process_text_event(&text, modifiers, backend, bindings_layout)
+         },
+-        egui::Event::Paste(text) => InputAction::BackendCall(
+-            #[cfg(not(any(target_os = "ios", target_os = "macos")))]
+-            if modifiers.contains(Modifiers::COMMAND | Modifiers::SHIFT) {
+-                BackendCommand::Write(text.as_bytes().to_vec())
+-            } else {
+-                // Hotfix - Send ^V when there's not selection on view.
+-                BackendCommand::Write([0x16].to_vec())
+-            },
+-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+-            {
+-                BackendCommand::Write(text.as_bytes().to_vec())
+-            },
+-        ),
++        egui::Event::Paste(text) => {
++            let bracketed = backend
++                .last_content()
++                .terminal_mode
++                .contains(TermMode::BRACKETED_PASTE);
++            InputAction::BackendCall(
++                #[cfg(not(any(target_os = "ios", target_os = "macos")))]
++                if modifiers.contains(Modifiers::COMMAND | Modifiers::SHIFT) {
++                    BackendCommand::Write(crate::backend::encode_paste(&text, bracketed))
++                } else {
++                    // Hotfix - Send ^V when there's not selection on view.
++                    BackendCommand::Write([0x16].to_vec())
++                },
++                #[cfg(any(target_os = "ios", target_os = "macos"))]
++                {
++                    BackendCommand::Write(crate::backend::encode_paste(&text, bracketed))
++                },
++            )
++        },
+         egui::Event::Copy => {
+             #[cfg(not(any(target_os = "ios", target_os = "macos")))]
+             if modifiers.contains(Modifiers::COMMAND | Modifiers::SHIFT) {
+@@ -514,7 +664,7 @@ fn process_left_button(
+     pressed: bool,
+ ) -> InputAction {
+     let terminal_mode = backend.last_content().terminal_mode;
+-    if terminal_mode.intersects(TermMode::MOUSE_MODE) {
++    if terminal_mode.intersects(TermMode::MOUSE_MODE) && !modifiers.shift {
+         InputAction::BackendCall(BackendCommand::MouseReport(
+             MouseButton::LeftButton,
+             *modifiers,
