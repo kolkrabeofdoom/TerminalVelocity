@@ -229,7 +229,7 @@ Die Übersetzung liegt in `src/i18n/nds.rs`. Ein Test stellt sicher, dass jeder 
 
 ### Schrift und Transparenz
 
-Die Schriftgröße lässt sich zwischen **10 und 28** einstellen. Wenn vorhanden, wird Consolas geladen; ansonsten greift die Schriftkonfiguration des Renderers.
+Die Schriftgröße lässt sich zwischen **10 und 28** einstellen. Wenn vorhanden, wird Consolas geladen; ansonsten greift die Schriftkonfiguration des Renderers. Für Zeichen, die diesen Schriften fehlen, springen Windows-Schriften ein: Segoe UI Symbol (z. B. ✓ ✗ ⎿ ✻, wie sie KI-CLIs ausgeben), Segoe UI Emoji (Emoji in Schwarz-Weiß), Microsoft YaHei (Chinesisch, Japanisch) und Malgun Gothic (Koreanisch). Fehlt eine davon, wird sie übersprungen.
 
 **Kompatible Fenstertransparenz** verwendet die Windows-Fensterdeckkraft. Dabei werden auch Text und Bedienelemente transparent. Bei abgeschaltetem Kompatibilitätsmodus betrifft die Transparenz die Hintergrundflächen und hängt von der Grafiktreiberunterstützung ab. **Hintergrund weichzeichnen (Windows-Acryl)** ist für diesen Modus optional. Standardmäßig ist der Kompatibilitätsmodus aktiv.
 
