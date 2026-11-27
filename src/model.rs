@@ -19,6 +19,48 @@ pub fn is_local_absolute_path(path: &Path) -> bool {
     path.is_absolute() && !is_unc_or_device_path(path)
 }
 
+/// `<SystemRoot>\Fonts\<name>` (fallback `windir`). Windows is not always on `C:`.
+/// `env` reads an environment variable; injectable so tests need not touch the process.
+pub fn system_font_path(name: &str, env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    let root = ["SystemRoot", "windir"]
+        .into_iter()
+        .filter_map(&env)
+        .map(|value| value.trim().to_string())
+        .find(|value| !value.is_empty())?;
+    let path = PathBuf::from(root).join("Fonts").join(name);
+    is_local_absolute_path(&path).then_some(path)
+}
+
+/// `GetDriveTypeW` result for a mapped network drive.
+const DRIVE_REMOTE: u32 = 4;
+
+/// Whether checking a reported directory for existence is safe on the GUI thread.
+/// Network drives can block for seconds when the server is unreachable; their paths
+/// are checked later, when a session actually starts there.
+fn needs_existence_probe(drive_type: u32) -> bool {
+    drive_type != DRIVE_REMOTE
+}
+
+/// Drive type of the path's drive root (`X:\`), 0 if unknown.
+#[cfg(windows)]
+fn drive_type(path: &Path) -> u32 {
+    use std::os::windows::ffi::OsStrExt;
+    let Some(std::path::Component::Prefix(prefix)) = path.components().next() else {
+        return 0;
+    };
+    let mut root: Vec<u16> = prefix.as_os_str().encode_wide().collect();
+    root.extend("\\".encode_utf16());
+    root.push(0);
+    // SAFETY: `root` is a NUL-terminated UTF-16 string that outlives the call;
+    // GetDriveTypeW only reads it and performs no network I/O for mapped drives.
+    unsafe { windows_sys::Win32::Storage::FileSystem::GetDriveTypeW(root.as_ptr()) }
+}
+
+#[cfg(not(windows))]
+fn drive_type(_: &Path) -> u32 {
+    0
+}
+
 /// Write JSON to a unique staging file with `create_new(true)` and atomically replace `path`.
 pub fn atomic_write_json(path: &Path, bytes: &[u8]) -> Result<(), String> {
     use std::io::Write;
@@ -645,7 +687,14 @@ impl Workspace {
             return false;
         };
         let path = PathBuf::from(path);
-        if !is_local_absolute_path(&path) || !path.is_dir() {
+        // Most prompts report the unchanged directory: no filesystem access needed.
+        if path == pane.directory {
+            return true;
+        }
+        if !is_local_absolute_path(&path) {
+            return false;
+        }
+        if needs_existence_probe(drive_type(&path)) && !path.is_dir() {
             return false;
         }
         pane.directory = path;
@@ -1184,5 +1233,61 @@ mod tests {
         ] {
             assert_eq!(reported_directory(&forged, &token), None, "{forged:.80}");
         }
+    }
+    #[test]
+    fn system_fonts_follow_the_windows_directory() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |key: &str| {
+                pairs
+                    .iter()
+                    .find(|(name, _)| *name == key)
+                    .map(|(_, value)| value.to_string())
+            }
+        };
+        assert_eq!(
+            system_font_path("consola.ttf", env(&[("SystemRoot", r"D:\WINDOWS")])),
+            Some(PathBuf::from(r"D:\WINDOWS\Fonts\consola.ttf"))
+        );
+        assert_eq!(
+            system_font_path(
+                "consola.ttf",
+                env(&[("SystemRoot", " "), ("windir", r"E:\Win")])
+            ),
+            Some(PathBuf::from(r"E:\Win\Fonts\consola.ttf"))
+        );
+        assert_eq!(system_font_path("consola.ttf", env(&[])), None);
+        assert_eq!(
+            system_font_path("consola.ttf", env(&[("SystemRoot", r"\\server\share")])),
+            None
+        );
+        assert_eq!(
+            system_font_path("consola.ttf", env(&[("SystemRoot", "Windows")])),
+            None
+        );
+    }
+    #[test]
+    fn network_drives_are_not_probed_and_unchanged_reports_skip_the_filesystem() {
+        assert!(!needs_existence_probe(DRIVE_REMOTE));
+        for local in [0, 1, 2, 3, 5, 6] {
+            assert!(needs_existence_probe(local), "{local}");
+        }
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let mut workspace = Workspace::default();
+        workspace.tabs.push(Tab {
+            name: "local".into(),
+            root: Node::Pane(Pane {
+                remote: None,
+                id: 1,
+                shell: Shell::Cmd,
+                directory: base.clone(),
+            }),
+        });
+        let token = new_cwd_token();
+        let report = |path: &Path| format!("{CWD_MARKER}{token}:{}", path.display());
+        assert!(workspace.update_directory(1, &report(&base), &token));
+        assert_eq!(workspace.inherited_directory(1, &base), base);
+        // A missing local directory is still rejected.
+        assert!(!workspace.update_directory(1, &report(&base.join("does-not-exist")), &token));
+        assert_eq!(workspace.inherited_directory(1, &base), base);
     }
 }
