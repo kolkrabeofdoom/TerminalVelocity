@@ -31,8 +31,8 @@ impl TerminalApp {
             self.workspace_guard = None;
         }
         self.status = match result {
-            Ok(()) => "Arbeitsbereich gespeichert".into(),
-            Err(e) => format!("Speichern fehlgeschlagen: {e}"),
+            Ok(()) => tr("Arbeitsbereich gespeichert").into(),
+            Err(e) => trf!("Speichern fehlgeschlagen: {e}", e = e),
         };
         saved
     }
@@ -45,17 +45,24 @@ pub(crate) fn load_workspace(
 ) -> (Workspace, String, Option<model::WorkspaceGuard>) {
     match std::fs::metadata(storage) {
         Ok(_) => match Workspace::load(storage) {
-            Ok(state) => (state, "Arbeitsbereich wiederhergestellt".to_string(), None),
+            Ok(state) => (
+                state,
+                tr("Arbeitsbereich wiederhergestellt").to_string(),
+                None,
+            ),
             Err(error) => {
                 // Never let the defaults silently replace the user's file on exit.
                 let backup = model::backup_unloadable(storage);
                 let status = match &backup {
-                    Ok(path) => format!(
-                        "Workspace nicht geladen: {error}. Kopie gesichert unter {}; automatisches Speichern ist ausgesetzt.",
-                        path.display()
+                    Ok(path) => trf!(
+                        "Workspace nicht geladen: {error}. Kopie gesichert unter {path}; automatisches Speichern ist ausgesetzt.",
+                        error = error,
+                        path = path.display()
                     ),
-                    Err(backup_error) => format!(
-                        "Workspace nicht geladen: {error}. Sicherung fehlgeschlagen ({backup_error}); Speichern ist gesperrt."
+                    Err(backup_error) => trf!(
+                        "Workspace nicht geladen: {error}. Sicherung fehlgeschlagen ({backup_error}); Speichern ist gesperrt.",
+                        error = error,
+                        backup_error = backup_error
                     ),
                 };
                 (
@@ -69,11 +76,14 @@ pub(crate) fn load_workspace(
             }
         },
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            (Workspace::default(), "Bereit".into(), None)
+            (Workspace::default(), tr("Bereit").into(), None)
         }
         Err(error) => (
             Workspace::default(),
-            format!("Lesefehler: {error}; Speichern ist gesperrt."),
+            trf!(
+                "Lesefehler: {error}; Speichern ist gesperrt.",
+                error = error
+            ),
             Some(model::WorkspaceGuard {
                 reason: error.to_string(),
                 backup: None,

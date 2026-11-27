@@ -116,20 +116,20 @@ pub(crate) fn draw_node(
                     ui.small(format!("#{}", pane.id));
                     if ctx.sessions.get(&pane.id).is_some_and(|s| s.notified) {
                         ui.colored_label(ctx.effects.visual().accent(), "●")
-                            .on_hover_text("Neues Signal oder beendete Sitzung in diesem Bereich");
+                            .on_hover_text(tr("Neues Signal oder beendete Sitzung in diesem Bereich"));
                     }
                     if ui
                         .add_enabled(
                             enabled,
                             egui::Button::new(if pane.remote.is_some() {
-                                "Neu verbinden"
+                                tr("Neu verbinden")
                             } else {
-                                "Sitzung neu starten"
+                                tr("Sitzung neu starten")
                             })
                             .small(),
                         )
                         .on_hover_text(
-                            "Gleicher Anbieter und aktueller Projektordner; bisherige Ausgabe wird geleert",
+                            tr("Gleicher Anbieter und aktueller Projektordner; bisherige Ausgabe wird geleert"),
                         )
                         .clicked()
                     {
@@ -137,7 +137,7 @@ pub(crate) fn draw_node(
                     }
                     if ui
                         .add_enabled(enabled, egui::Button::new("×").small())
-                        .on_hover_text("Bereich schließen · Strg+Umschalt+W")
+                        .on_hover_text(tr("Bereich schließen · Strg+Umschalt+W"))
                         .clicked()
                     {
                         *ctx.close = Some(pane.id);
@@ -147,7 +147,7 @@ pub(crate) fn draw_node(
                             egui::RichText::new(format!(
                                 "{}{}",
                                 if pane.remote.is_some() {
-                                    "Lokaler Startordner: "
+                                    tr("Lokaler Startordner: ")
                                 } else {
                                     ""
                                 },
@@ -165,7 +165,7 @@ pub(crate) fn draw_node(
                     if let Some(error) = &session.error {
                         ui.colored_label(Color32::LIGHT_RED, error);
                         if ui
-                            .add_enabled(enabled, egui::Button::new("Sitzung neu starten"))
+                            .add_enabled(enabled, egui::Button::new(tr("Sitzung neu starten")))
                             .clicked()
                         {
                             *ctx.retry = Some(pane.id);
@@ -175,9 +175,9 @@ pub(crate) fn draw_node(
                         ui.colored_label(
                             Color32::YELLOW,
                             if pane.remote.is_some() {
-                                "Verbindung beendet. Ausgabe bleibt erhalten; oben mit „Neu verbinden“ erneut öffnen."
+                                tr("Verbindung beendet. Ausgabe bleibt erhalten; oben mit „Neu verbinden“ erneut öffnen.")
                             } else {
-                                "Sitzung beendet. Mit „Sitzung neu starten“ oben erneut öffnen."
+                                tr("Sitzung beendet. Mit „Sitzung neu starten“ oben erneut öffnen.")
                             },
                         );
                     }
@@ -250,8 +250,8 @@ pub(crate) fn draw_node(
                                     .flatten();
                                 let editor_label =
                                     match editor_target.as_ref().and_then(|(_, line)| *line) {
-                                        Some(line) => format!("Datei im Editor öffnen (Zeile {line})"),
-                                        None => "Datei im Editor öffnen".into(),
+                                        Some(line) => trf!("Datei im Editor öffnen (Zeile {line})", line = line),
+                                        None => tr("Datei im Editor öffnen").into(),
                                     };
                                 if ui
                                     .add_enabled(
@@ -266,7 +266,7 @@ pub(crate) fn draw_node(
                                                 None => p.display().to_string(),
                                             })
                                             .unwrap_or_else(|| {
-                                                "Rechtsklick auf einen lokalen Dateipfad (optional mit :Zeile)."
+                                                tr("Rechtsklick auf einen lokalen Dateipfad (optional mit :Zeile).")
                                                     .into()
                                             }),
                                     )
@@ -282,12 +282,12 @@ pub(crate) fn draw_node(
                                     .data(|data| data.get_temp::<Option<PathBuf>>(image_target_id))
                                     .flatten();
                                 if ui
-                                    .add_enabled(path.is_some(), egui::Button::new("Bild öffnen"))
+                                    .add_enabled(path.is_some(), egui::Button::new(tr("Bild öffnen")))
                                     .on_hover_text(
                                         path.as_ref()
                                             .map(|p| p.display().to_string())
                                             .unwrap_or_else(|| {
-                                                "Rechtsklick auf einen lokalen Bilddateipfad. Remote-Pfade werden nicht lokal geöffnet."
+                                                tr("Rechtsklick auf einen lokalen Bilddateipfad. Remote-Pfade werden nicht lokal geöffnet.")
                                                     .into()
                                             }),
                                     )
@@ -297,7 +297,7 @@ pub(crate) fn draw_node(
                                         path.map(|path| inline_image::Request::Open(pane.id, path));
                                     ui.close_menu();
                                 }
-                                if ui.button("Bild auswählen …").clicked() {
+                                if ui.button(tr("Bild auswählen …")).clicked() {
                                     *ctx.image_request =
                                         Some(inline_image::Request::Choose(pane.id));
                                     ui.close_menu();
@@ -305,14 +305,14 @@ pub(crate) fn draw_node(
                                 ui.separator();
                                 let text = backend.selectable_content();
                                 let selected = !text.trim().is_empty();
-                                if ui.add_enabled(selected, egui::Button::new("Kopieren")).clicked() {
+                                if ui.add_enabled(selected, egui::Button::new(tr("Kopieren"))).clicked() {
                                     ui.ctx().copy_text(text.clone());
                                     ui.close_menu();
                                 }
                                 if ui
                                     .add_enabled(
                                         selected,
-                                        egui::Button::new("Auswahl im Editor öffnen"),
+                                        egui::Button::new(tr("Auswahl im Editor öffnen")),
                                     )
                                     .clicked()
                                 {
@@ -321,7 +321,7 @@ pub(crate) fn draw_node(
                                     ui.close_menu();
                                 }
                                 if ui
-                                    .add_enabled(selected, egui::Button::new("An KI übergeben …"))
+                                    .add_enabled(selected, egui::Button::new(tr("An KI übergeben …")))
                                     .clicked()
                                 {
                                     *ctx.ai_selection = Some(ai::Draft::new(
@@ -333,7 +333,7 @@ pub(crate) fn draw_node(
                                 }
                                 ui.separator();
                                 if pane.remote.is_some() {
-                                    ui.small("KI-Übergabe öffnet eine lokale KI-Sitzung.");
+                                    ui.small(tr("KI-Übergabe öffnet eine lokale KI-Sitzung."));
                                 }
                                 for action in ai::QuickAction::ALL {
                                     if ui
@@ -349,7 +349,7 @@ pub(crate) fn draw_node(
                                     }
                                 }
                                 if !selected {
-                                    ui.weak("Zuerst Text im Terminal markieren.");
+                                    ui.weak(tr("Zuerst Text im Terminal markieren."));
                                 }
                             });
                         }

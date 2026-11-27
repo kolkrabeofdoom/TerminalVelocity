@@ -38,7 +38,7 @@ impl TerminalApp {
             .profiles
             .profiles
             .get(index)
-            .ok_or("Projektprofil fehlt")?;
+            .ok_or(tr("Projektprofil fehlt"))?;
         let name = profile.name.clone();
         let (workspace, next_id) = profile.prepare(&directory, &self.workspace, self.next_id)?;
         let panes: Vec<_> = workspace
@@ -55,9 +55,9 @@ impl TerminalApp {
                 .resolve(Some(&workspace.shell_paths[pane.shell as usize]), base)
                 .is_none()
             {
-                return Err(format!(
-                    "{} nicht gefunden. Bitte zuerst den Programmpfad unter Einstellungen prüfen.",
-                    pane.shell.label()
+                return Err(trf!(
+                    "{shell} nicht gefunden. Bitte zuerst den Programmpfad unter Einstellungen prüfen.",
+                    shell = pane.shell.label()
                 ));
             }
         }
@@ -69,9 +69,12 @@ impl TerminalApp {
         }
         self.focus_first();
         self.status = if self.sessions.values().any(|s| s.error.is_some()) {
-            format!("Projekt „{name}“ geöffnet. Startfehler im betroffenen Bereich prüfen.")
+            trf!(
+                "Projekt „{name}“ geöffnet. Startfehler im betroffenen Bereich prüfen.",
+                name = name
+            )
         } else {
-            format!("Projekt „{name}“ in neuen Tabs geöffnet")
+            trf!("Projekt „{name}“ in neuen Tabs geöffnet", name = name)
         };
         Ok(())
     }
@@ -85,19 +88,19 @@ impl TerminalApp {
         let mut cancel = false;
         let mut delete = None;
         let title = if dialog.saving {
-            "Projektprofil speichern"
+            tr("Projektprofil speichern")
         } else {
-            "Projekt öffnen"
+            tr("Projekt öffnen")
         };
         egui::Window::new(title).open(&mut open).default_width(620.0).vscroll(true).show(ctx, |ui| {
             if dialog.saving {
-                ui.label("Der aktuelle Aufbau wird als Vorlage gespeichert: Tabs, Teilungen, Anbieter und Bereichsordner.");
-                ui.label("Projektname");
+                ui.label(tr("Der aktuelle Aufbau wird als Vorlage gespeichert: Tabs, Teilungen, Anbieter und Bereichsordner."));
+                ui.label(tr("Projektname"));
                 ui.text_edit_singleline(&mut dialog.name);
-                ui.label(format!("{} Tabs · {} Bereiche", self.workspace.tabs.len(), self.workspace.panes().len()));
+                ui.label(trf!("{tabs} Tabs · {panes} Bereiche", tabs = self.workspace.tabs.len(), panes = self.workspace.panes().len()));
             } else {
-                ui.label("Das Projekt startet in neuen Tabs. Laufende Sitzungen bleiben erhalten.");
-                if self.profiles.profiles.is_empty() { ui.weak("Noch keine Profile. Richte deine Bereiche ein und wähle oben „Projekt speichern …“."); }
+                ui.label(tr("Das Projekt startet in neuen Tabs. Laufende Sitzungen bleiben erhalten."));
+                if self.profiles.profiles.is_empty() { ui.weak(tr("Noch keine Profile. Richte deine Bereiche ein und wähle oben „Projekt speichern …“.")); }
                 for (index, profile) in self.profiles.profiles.iter().enumerate() {
                     if ui.selectable_label(dialog.selected == Some(index), &profile.name).clicked() {
                         dialog.selected = Some(index);
@@ -108,31 +111,31 @@ impl TerminalApp {
                 }
             }
             ui.separator();
-            ui.label("Projektordner (vollständiger Pfad)");
+            ui.label(tr("Projektordner (vollständiger Pfad)"));
             ui.text_edit_singleline(&mut dialog.directory);
-            ui.small("Bereichsordner innerhalb des gespeicherten Projektordners ziehen beim Öffnen mit um. Ordner außerhalb behalten ihren Pfad.");
+            ui.small(tr("Bereichsordner innerhalb des gespeicherten Projektordners ziehen beim Öffnen mit um. Ordner außerhalb behalten ihren Pfad."));
             if let Some(profile) = dialog.selected.and_then(|i| self.profiles.profiles.get(i)) {
-                ui.label(format!("{} Tabs · Standard: {}", profile.tabs.len(), profile.default_shell.label()));
+                ui.label(trf!("{tabs} Tabs · Standard: {shell}", tabs = profile.tabs.len(), shell = profile.default_shell.label()));
                 let mut panes = vec![];
                 for tab in &profile.tabs { tab.root.panes(&mut panes); }
                 for pane in panes {
                     let directory = pane.directory.strip_prefix(&profile.directory).map(|relative| PathBuf::from(&dialog.directory).join(relative)).unwrap_or(pane.directory);
-                    ui.small(format!("{} · lokaler Ordner: {}", pane.remote.as_ref().map(|r| r.label()).unwrap_or_else(|| pane.shell.label().into()), directory.display()));
+                    ui.small(trf!("{name} · lokaler Ordner: {directory}", name = pane.remote.as_ref().map(|r| r.label()).unwrap_or_else(|| pane.shell.label().into()), directory = directory.display()));
                 }
-                if ui.button("Profil löschen …").clicked() { dialog.delete_target = dialog.selected; }
+                if ui.button(tr("Profil löschen …")).clicked() { dialog.delete_target = dialog.selected; }
             }
             if let Some(index) = dialog.delete_target {
-                ui.colored_label(Color32::YELLOW, "Dieses gespeicherte Profil löschen? Laufende Sitzungen bleiben erhalten.");
+                ui.colored_label(Color32::YELLOW, tr("Dieses gespeicherte Profil löschen? Laufende Sitzungen bleiben erhalten."));
                 ui.horizontal(|ui| {
-                    if ui.button("Profil löschen bestätigen").clicked() { delete = Some(index); }
-                    if ui.button("Profil behalten").clicked() { dialog.delete_target = None; }
+                    if ui.button(tr("Profil löschen bestätigen")).clicked() { delete = Some(index); }
+                    if ui.button(tr("Profil behalten")).clicked() { dialog.delete_target = None; }
                 });
             }
             if let Some(error) = &dialog.error { ui.colored_label(Color32::LIGHT_RED, error); }
-            ui.small("Prozesse, Terminalausgaben und KI-Chat-Verläufe werden nicht gespeichert oder fortgesetzt.");
+            ui.small(tr("Prozesse, Terminalausgaben und KI-Chat-Verläufe werden nicht gespeichert oder fortgesetzt."));
             ui.horizontal(|ui| {
-                submit = ui.add_enabled(self.profiles_error.is_none() && (dialog.saving || dialog.selected.is_some()) && dialog.delete_target.is_none(), egui::Button::new(if dialog.saving { "Profil speichern" } else { "Projekt in neuen Tabs öffnen" })).clicked();
-                cancel = ui.button("Abbrechen").clicked();
+                submit = ui.add_enabled(self.profiles_error.is_none() && (dialog.saving || dialog.selected.is_some()) && dialog.delete_target.is_none(), egui::Button::new(if dialog.saving { tr("Profil speichern") } else { tr("Projekt in neuen Tabs öffnen") })).clicked();
+                cancel = ui.button(tr("Abbrechen")).clicked();
             });
         });
         if let Some(index) = delete {
@@ -145,7 +148,7 @@ impl TerminalApp {
                     dialog.delete_target = None;
                     dialog.error = None;
                     dialog.directory.clear();
-                    self.status = "Projektprofil gelöscht".into();
+                    self.status = tr("Projektprofil gelöscht").into();
                 }
                 Err(error) => dialog.error = Some(error),
             }
@@ -155,7 +158,7 @@ impl TerminalApp {
                 (|| -> Result<(), String> {
                     let directory = PathBuf::from(&dialog.directory);
                     if !directory.is_dir() {
-                        return Err("Der Projektordner existiert nicht.".into());
+                        return Err(tr("Der Projektordner existiert nicht.").into());
                     }
                     let profile =
                         profiles::Profile::capture(&dialog.name, directory, &self.workspace)?;
@@ -163,7 +166,10 @@ impl TerminalApp {
                     updated.profiles.push(profile);
                     updated.save(&self.storage.with_file_name("profiles.json"))?;
                     self.profiles = updated;
-                    self.status = format!("Projektprofil „{}“ gespeichert", dialog.name.trim());
+                    self.status = trf!(
+                        "Projektprofil „{name}“ gespeichert",
+                        name = dialog.name.trim()
+                    );
                     Ok(())
                 })()
             } else {

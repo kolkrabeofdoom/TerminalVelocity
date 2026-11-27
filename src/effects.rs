@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +14,7 @@ pub enum Preset {
 impl Preset {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Off => "Aus",
+            Self::Off => tr("Aus"),
             Self::Aurora => "Aurora",
             Self::Phosphor => "Phosphor",
             Self::DeepSpace => "Deep Space",
@@ -93,7 +94,7 @@ impl Settings {
         egui_term::TerminalTheme::new(Box::new(palette))
     }
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.label("Grafikeffekte");
+        ui.label(tr("Grafikeffekte"));
         ui.horizontal_wrapped(|ui| {
             for preset in [
                 Preset::Off,
@@ -105,25 +106,25 @@ impl Settings {
             }
         });
         ui.add_enabled_ui(self.preset != Preset::Off, |ui| {
-            ui.add(egui::Slider::new(&mut self.intensity, 0.0..=1.0).text("Effektstärke"));
-            ui.checkbox(&mut self.animations, "Animationen");
+            ui.add(egui::Slider::new(&mut self.intensity, 0.0..=1.0).text(tr("Effektstärke")));
+            ui.checkbox(&mut self.animations, tr("Animationen"));
             ui.add_enabled(
                 self.animations,
                 egui::Checkbox::new(&mut self.cursor_trail, "Cursor-Schweif"),
             );
             if self.preset == Preset::Phosphor {
-                ui.checkbox(&mut self.amber, "Bernstein statt Grün");
+                ui.checkbox(&mut self.amber, tr("Bernstein statt Grün"));
                 ui.add_enabled_ui(self.animations, |ui| {
                     ui.checkbox(&mut self.text_afterglow, "Text-Nachleuchten");
                     ui.add_enabled_ui(self.text_afterglow, |ui| {
-                        ui.add(egui::Slider::new(&mut self.afterglow_strength, 0.0..=1.0).text("Leuchtstärke"));
-                        ui.add(egui::Slider::new(&mut self.afterglow_duration, 0.1..=1.5).suffix(" s").text("Nachleuchtdauer"));
+                        ui.add(egui::Slider::new(&mut self.afterglow_strength, 0.0..=1.0).text(tr("Leuchtstärke")));
+                        ui.add(egui::Slider::new(&mut self.afterglow_duration, 0.1..=1.5).suffix(" s").text(tr("Nachleuchtdauer")));
                     });
                 });
-                ui.small("Neue und geänderte Zeichen leuchten kurz auf. Gelöschte Zeichen hinterlassen keine Textspuren.");
+                ui.small(tr("Neue und geänderte Zeichen leuchten kurz auf. Gelöschte Zeichen hinterlassen keine Textspuren."));
             }
         });
-        ui.small("Effekte liegen hinter dem Text. Animationen laufen nur im aktiven Bereich bei fokussiertem Fenster, mit höchstens 20 Hintergrundbildern pro Sekunde. Ohne Animationen bleibt der Hintergrund statisch.");
+        ui.small(tr("Effekte liegen hinter dem Text. Animationen laufen nur im aktiven Bereich bei fokussiertem Fenster, mit höchstens 20 Hintergrundbildern pro Sekunde. Ohne Animationen bleibt der Hintergrund statisch."));
     }
 }
 

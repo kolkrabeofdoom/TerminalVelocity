@@ -73,7 +73,10 @@ impl TerminalApp {
         let result = (|| {
             let mut env = Default::default();
             if !pane.directory.is_dir() {
-                return Err(format!("Startordner fehlt: {}", pane.directory.display()));
+                return Err(trf!(
+                    "Startordner fehlt: {directory}",
+                    directory = pane.directory.display()
+                ));
             }
             let (executable, args) = if let Some(command) = command {
                 command
@@ -87,9 +90,9 @@ impl TerminalApp {
                         &app_dir,
                     )
                     .ok_or_else(|| {
-                        format!(
-                            "{} wurde nicht gefunden. Unter Einstellungen → Shell-Programme einen Pfad angeben oder die portable Shell im Programmordner ablegen.",
-                            pane.shell.label()
+                        trf!(
+                            "{shell} wurde nicht gefunden. Unter Einstellungen → Shell-Programme einen Pfad angeben oder die portable Shell im Programmordner ablegen.",
+                            shell = pane.shell.label()
                         )
                     })?;
                 env = pane.shell.session_env(&cwd_token);
@@ -131,9 +134,12 @@ impl TerminalApp {
 
     pub(crate) fn send_selection(&mut self, ctx: &egui::Context) -> Result<(), String> {
         if self.workspace.tabs.len() >= 32 || self.sessions.len() >= 64 {
-            return Err("Limit: 32 Tabs / 64 Bereiche erreicht.".into());
+            return Err(tr("Limit: 32 Tabs / 64 Bereiche erreicht.").into());
         }
-        let draft = self.ai_draft.as_ref().ok_or("Keine Auswahl vorhanden")?;
+        let draft = self
+            .ai_draft
+            .as_ref()
+            .ok_or(tr("Keine Auswahl vorhanden"))?;
         let base = self.app_dir();
         let executable = draft
             .provider
@@ -142,9 +148,9 @@ impl TerminalApp {
                 base,
             )
             .ok_or_else(|| {
-                format!(
-                    "{} nicht gefunden. Bitte den Programmpfad in Einstellungen prüfen.",
-                    draft.provider.label()
+                trf!(
+                    "{provider} nicht gefunden. Bitte den Programmpfad in Einstellungen prüfen.",
+                    provider = draft.provider.label()
                 )
             })?;
         let command = draft.command(executable)?;
@@ -166,12 +172,12 @@ impl TerminalApp {
         }
         self.focused = pane.id;
         self.workspace.tabs.push(Tab {
-            name: format!("{} · Auswahl", pane.shell.label()),
+            name: trf!("{shell} · Auswahl", shell = pane.shell.label()),
             root: Node::Pane(pane),
         });
         self.workspace.active_tab = self.workspace.tabs.len() - 1;
         self.ai_draft = None;
-        self.status = "Auswahl an neue KI-Sitzung übergeben".into();
+        self.status = tr("Auswahl an neue KI-Sitzung übergeben").into();
         Ok(())
     }
 
@@ -189,13 +195,16 @@ impl TerminalApp {
                 .get(&id)
                 .is_some_and(|session| session.error.is_none())
             {
-                format!(
-                    "{} neu gestartet · {}",
-                    pane.shell.label(),
-                    pane.directory.display()
+                trf!(
+                    "{shell} neu gestartet · {directory}",
+                    shell = pane.shell.label(),
+                    directory = pane.directory.display()
                 )
             } else {
-                format!("Neustart fehlgeschlagen: {}", pane.shell.label())
+                trf!(
+                    "Neustart fehlgeschlagen: {shell}",
+                    shell = pane.shell.label()
+                )
             };
         }
     }

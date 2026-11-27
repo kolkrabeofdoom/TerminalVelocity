@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 use eframe::egui;
 use std::{path::PathBuf, sync::mpsc};
 
@@ -109,14 +110,14 @@ pub fn fit(image: image::RgbaImage, available: usize) -> image::RgbaImage {
 
 pub fn dropped_path(files: Vec<egui::DroppedFile>) -> Result<PathBuf, String> {
     if files.len() != 1 {
-        return Err("Bitte jeweils genau eine Bilddatei ablegen.".into());
+        return Err(tr("Bitte jeweils genau eine Bilddatei ablegen.").into());
     }
     files
         .into_iter()
         .next()
         .unwrap()
         .path
-        .ok_or_else(|| "Bitte eine lokale Bilddatei ablegen.".into())
+        .ok_or_else(|| tr("Bitte eine lokale Bilddatei ablegen.").into())
 }
 
 impl Loader {
@@ -128,7 +129,7 @@ impl Loader {
         ctx: &egui::Context,
     ) -> Result<(), String> {
         if self.pending.is_some() {
-            return Err("Ein Bild wird bereits geladen. Bitte kurz warten.".into());
+            return Err(tr("Ein Bild wird bereits geladen. Bitte kurz warten.").into());
         }
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
@@ -149,7 +150,9 @@ impl Loader {
         let result = match rx.try_recv() {
             Ok(result) => result,
             Err(mpsc::TryRecvError::Empty) => return None,
-            Err(mpsc::TryRecvError::Disconnected) => Err("Bildladeprozess wurde beendet.".into()),
+            Err(mpsc::TryRecvError::Disconnected) => {
+                Err(tr("Bildladeprozess wurde beendet.").into())
+            }
         };
         let result = (*generation, *width, result);
         self.pending = None;

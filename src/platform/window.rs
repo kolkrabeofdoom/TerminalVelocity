@@ -1,5 +1,7 @@
 //! Native window opacity via the Windows API.
 
+use crate::i18n::tr;
+
 pub(crate) fn set_window_opacity(
     window: &impl raw_window_handle::HasWindowHandle,
     alpha: Option<u8>,
@@ -11,7 +13,7 @@ pub(crate) fn set_window_opacity(
     };
     let handle = window.window_handle().map_err(|error| error.to_string())?;
     let RawWindowHandle::Win32(handle) = handle.as_raw() else {
-        return Err("Kein Windows-Fensterhandle".into());
+        return Err(tr("Kein Windows-Fensterhandle").into());
     };
     let hwnd = handle.hwnd.get() as *mut std::ffi::c_void;
     // Layered-window alpha is composed by Windows, independently of OpenGL's framebuffer alpha.
@@ -32,7 +34,7 @@ pub(crate) fn set_window_opacity(
                 return Err(std::io::Error::last_os_error().to_string());
             }
             if actual_alpha != alpha || flags & LWA_ALPHA == 0 {
-                return Err("Windows hat die Fensterdeckkraft nicht übernommen".into());
+                return Err(tr("Windows hat die Fensterdeckkraft nicht übernommen").into());
             }
         } else if style & WS_EX_LAYERED as isize != 0 {
             SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);

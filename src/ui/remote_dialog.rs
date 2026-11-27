@@ -19,7 +19,7 @@ impl TerminalApp {
             remote: Some(connection.clone()),
         };
         if !pane.directory.is_dir() {
-            return Err("Lokaler Startordner existiert nicht.".into());
+            return Err(tr("Lokaler Startordner existiert nicht.").into());
         }
         let mut updated = self.workspace.clone();
         if placement == 0 {
@@ -32,7 +32,7 @@ impl TerminalApp {
             let tab = updated
                 .tabs
                 .get_mut(updated.active_tab)
-                .ok_or("Kein aktiver Tab zum Teilen")?;
+                .ok_or(tr("Kein aktiver Tab zum Teilen"))?;
             if !tab.root.split(
                 self.focused,
                 if placement == 1 {
@@ -42,7 +42,7 @@ impl TerminalApp {
                 },
                 pane.clone(),
             ) {
-                return Err("Bereich konnte nicht geteilt werden (Layoutgrenze).".into());
+                return Err(tr("Bereich konnte nicht geteilt werden (Layoutgrenze).").into());
             }
         }
         updated.validate()?;
@@ -54,9 +54,9 @@ impl TerminalApp {
         self.workspace = updated;
         self.next_id += 1;
         self.focused = pane.id;
-        self.status = format!(
-            "Verbindungsaufbau: {} · Anmeldung im Terminal",
-            connection.label()
+        self.status = trf!(
+            "Verbindungsaufbau: {target} · Anmeldung im Terminal",
+            target = connection.label()
         );
         Ok(())
     }
@@ -67,7 +67,7 @@ impl TerminalApp {
         };
         let (mut open, mut connect, mut save, mut remove) = (true, false, false, false);
         egui::Window::new("Remote-Verbindungen").open(&mut open).default_width(600.0).vscroll(true).show(ctx, |ui| {
-            ui.label("Gespeicherte Verbindungen");
+            ui.label(tr("Gespeicherte Verbindungen"));
             let mut indices: Vec<_> = (0..self.workspace.connections.len()).collect();
             indices.sort_by_key(|&i| !self.workspace.connections[i].favorite);
             egui::ScrollArea::vertical().max_height(120.0).show(ui, |ui| {
@@ -80,41 +80,41 @@ impl TerminalApp {
                     }
                 }
             });
-            if ui.button("Neue Verbindung").clicked() { dialog = remote::Dialog::default(); }
+            if ui.button(tr("Neue Verbindung")).clicked() { dialog = remote::Dialog::default(); }
             ui.separator();
-            ui.horizontal(|ui| { ui.label("Name"); ui.text_edit_singleline(&mut dialog.connection.name); ui.checkbox(&mut dialog.connection.favorite, "Favorit"); });
+            ui.horizontal(|ui| { ui.label(tr("Name")); ui.text_edit_singleline(&mut dialog.connection.name); ui.checkbox(&mut dialog.connection.favorite, tr("Favorit")); });
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut dialog.connection.transport, remote::Transport::Ssh, "SSH");
                 ui.selectable_value(&mut dialog.connection.transport, remote::Transport::WinRm, "PowerShell / WinRM");
             });
-            ui.label("Host / IP-Adresse (bei SSH auch Hostalias)"); ui.text_edit_singleline(&mut dialog.connection.host);
-            ui.label("Konto (leer = SSH-Konfiguration bzw. aktuelle Windows-Identität)"); ui.text_edit_singleline(&mut dialog.connection.user);
-            ui.label("Port (leer = Konfiguration / Standard)"); ui.text_edit_singleline(&mut dialog.port);
+            ui.label(tr("Host / IP-Adresse (bei SSH auch Hostalias)")); ui.text_edit_singleline(&mut dialog.connection.host);
+            ui.label(tr("Konto (leer = SSH-Konfiguration bzw. aktuelle Windows-Identität)")); ui.text_edit_singleline(&mut dialog.connection.user);
+            ui.label(tr("Port (leer = Konfiguration / Standard)")); ui.text_edit_singleline(&mut dialog.port);
             if dialog.connection.transport == remote::Transport::Ssh {
-                ui.label("Schlüsseldatei (optional, absoluter Pfad)"); ui.text_edit_singleline(&mut dialog.connection.key_file);
-                ui.small("OpenSSH nutzt deine SSH-Konfiguration, den Agent und known_hosts. Hostschlüssel und Anmeldung werden im Terminal abgefragt.");
+                ui.label(tr("Schlüsseldatei (optional, absoluter Pfad)")); ui.text_edit_singleline(&mut dialog.connection.key_file);
+                ui.small(tr("OpenSSH nutzt deine SSH-Konfiguration, den Agent und known_hosts. Hostschlüssel und Anmeldung werden im Terminal abgefragt."));
             } else {
-                ui.checkbox(&mut dialog.connection.https, "HTTPS verwenden");
-                ui.label("PowerShell-Endpunkt (optional, z. B. PowerShell.7)"); ui.text_edit_singleline(&mut dialog.connection.endpoint);
-                ui.small("Mit angegebenem Konto wird das Kennwort beim Verbinden abgefragt. Der Zielserver benötigt einen eingerichteten WinRM-Endpunkt.");
+                ui.checkbox(&mut dialog.connection.https, tr("HTTPS verwenden"));
+                ui.label(tr("PowerShell-Endpunkt (optional, z. B. PowerShell.7)")); ui.text_edit_singleline(&mut dialog.connection.endpoint);
+                ui.small(tr("Mit angegebenem Konto wird das Kennwort beim Verbinden abgefragt. Der Zielserver benötigt einen eingerichteten WinRM-Endpunkt."));
             }
-            ui.small("Gespeichert werden nur Verbindungseinstellungen, keine Kennwörter oder Schlüssel-Inhalte. Änderungen gelten für neue Verbindungen; offene Bereiche behalten ihre Konfiguration.");
+            ui.small(tr("Gespeichert werden nur Verbindungseinstellungen, keine Kennwörter oder Schlüssel-Inhalte. Änderungen gelten für neue Verbindungen; offene Bereiche behalten ihre Konfiguration."));
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut dialog.placement, 0, "Neuer Tab");
-                ui.selectable_value(&mut dialog.placement, 1, "Nebeneinander");
-                ui.selectable_value(&mut dialog.placement, 2, "Untereinander");
+                ui.selectable_value(&mut dialog.placement, 0, tr("Neuer Tab"));
+                ui.selectable_value(&mut dialog.placement, 1, tr("Nebeneinander"));
+                ui.selectable_value(&mut dialog.placement, 2, tr("Untereinander"));
             });
             if let Some(error) = &dialog.error { ui.colored_label(Color32::LIGHT_RED, error); }
             ui.horizontal(|ui| {
-                connect = ui.button("Verbinden").clicked();
-                save = ui.button("Verbindung speichern").clicked();
-                if ui.add_enabled(dialog.selected.is_some(), egui::Button::new("Löschen …")).clicked() { dialog.delete = true; }
+                connect = ui.button(tr("Verbinden")).clicked();
+                save = ui.button(tr("Verbindung speichern")).clicked();
+                if ui.add_enabled(dialog.selected.is_some(), egui::Button::new(tr("Löschen …"))).clicked() { dialog.delete = true; }
             });
             if dialog.delete {
-                ui.label("Gespeicherte Verbindung löschen? Offene Bereiche und Projektprofile behalten ihre Kopie.");
+                ui.label(tr("Gespeicherte Verbindung löschen? Offene Bereiche und Projektprofile behalten ihre Kopie."));
                 ui.horizontal(|ui| {
-                    remove = ui.button("Löschen bestätigen").clicked();
-                    if ui.button("Behalten").clicked() { dialog.delete = false; }
+                    remove = ui.button(tr("Löschen bestätigen")).clicked();
+                    if ui.button(tr("Behalten")).clicked() { dialog.delete = false; }
                 });
             }
         });
@@ -131,7 +131,7 @@ impl TerminalApp {
                             .port
                             .trim()
                             .parse()
-                            .map_err(|_| "Ungültiger Port (1–65535)")?,
+                            .map_err(|_| tr("Ungültiger Port (1–65535)"))?,
                     )
                 };
                 if dialog.connection.transport == remote::Transport::WinRm {
@@ -155,7 +155,7 @@ impl TerminalApp {
                         return Err(self.status.clone());
                     }
                     dialog.selected = Some(index);
-                    self.status = "Verbindung gespeichert".into();
+                    self.status = tr("Verbindung gespeichert").into();
                 }
                 if connect {
                     self.open_remote(dialog.connection.clone(), dialog.placement, ctx)?;

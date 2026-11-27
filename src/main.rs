@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// Declared first: the `trf!` macro is used by all following modules.
+#[macro_use]
+mod i18n;
 mod ai;
 mod app;
 mod background;
@@ -28,6 +31,7 @@ use std::{
 // Every module imports the crate root with `use crate::*;`, so the shared types
 // below are reachable everywhere without long paths.
 use app::*;
+use i18n::tr;
 use platform::*;
 use ui::*;
 

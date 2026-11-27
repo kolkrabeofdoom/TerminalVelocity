@@ -66,6 +66,7 @@ impl TerminalApp {
             .unwrap_or_default()
             .with_file_name("workspace.json");
         let (workspace, load_status, workspace_guard) = load_workspace(&storage);
+        i18n::set_language(workspace.language);
         let (profiles, profiles_error) =
             match profiles::Library::load(&storage.with_file_name("profiles.json")) {
                 Ok(profiles) => (profiles, None),
