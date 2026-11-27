@@ -259,6 +259,8 @@ impl Shell {
             Self::OpenAI => "OpenAI API CLI",
         }
     }
+    /// Default executable next to the app; only the smoke test needs this shortcut.
+    #[cfg(feature = "test-tools")]
     pub fn executable(self) -> Option<PathBuf> {
         self.resolve(None, std::env::current_exe().ok()?.parent()?)
     }

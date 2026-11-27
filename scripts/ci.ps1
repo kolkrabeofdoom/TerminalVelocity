@@ -11,11 +11,15 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Formatting check failed' }
     & cargo clippy --locked --all-targets --all-features -- -D warnings
     if ($LASTEXITCODE -ne 0) { throw 'Clippy failed' }
+    # Release builds have no test-tools feature; they must be warning-free too.
+    & cargo clippy --locked --all-targets -- -D warnings
+    if ($LASTEXITCODE -ne 0) { throw 'Clippy without features failed' }
     & cargo test --locked -- --include-ignored
     if ($LASTEXITCODE -ne 0) { throw 'Offline tests failed' }
     & cargo test --locked -p vte --lib
     if ($LASTEXITCODE -ne 0) { throw 'Parser regression tests failed' }
-    & (Join-Path $PSScriptRoot 'build.ps1') -SkipTests
+    # PTY test modes exist only with the test-tools feature.
+    & (Join-Path $PSScriptRoot 'build.ps1') -SkipTests -Features test-tools
 
     $targetRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $projectRoot 'target' }
     $executable = Join-Path $targetRoot 'release/TerminalVelocity.exe'
@@ -32,6 +36,17 @@ try {
         if (Test-Path -LiteralPath $report) { Get-Content -LiteralPath $report -Encoding utf8 | Write-Host }
         if ($process.ExitCode -ne 0) { throw "$mode failed with exit code $($process.ExitCode)" }
     }
+
+    # Rebuild as shipped (no test-tools) and make sure the EXE refuses test modes.
+    & (Join-Path $PSScriptRoot 'build.ps1') -SkipTests
+    $probe = Start-Process -FilePath $executable -ArgumentList '--directory-test' -WindowStyle Hidden -PassThru
+    if (-not $probe.WaitForExit(30000)) {
+        Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
+        throw 'Release executable contains test modes (probe timed out)'
+    }
+    $probe.Refresh()
+    if ($probe.ExitCode -ne 2) { throw "Release executable contains test modes (exit code $($probe.ExitCode), expected 2)" }
+    Write-Host 'Release build refuses test modes (exit code 2)'
 } finally {
     Pop-Location
 }
