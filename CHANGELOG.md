@@ -1,6 +1,6 @@
 # Änderungen
 
-## Unveröffentlicht
+## 1.1.0 – „Nigge Tied“ – 27. November 2026
 
 - **Plattdütsk (Ostwestfaolen)**: Neue Oberflächensprache neben Hochdeutsch, umschaltbar unter Einstellungen → Sprache, sofort wirksam. Alle rund 330 Texte der Oberfläche sind übersetzt; KI-Schnellaktionen antworten dann auf Plattdeutsch.
 - **Strg+U löscht wieder die Eingabezeile**: Die Tastenkombination schickte ein `Q` statt des Steuerzeichens `0x15`. In Git Bash und anderen Readline-Shells erschien dadurch ein Q.

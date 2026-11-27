@@ -118,3 +118,16 @@ Neu geprüft:
 Praktisch geprüft (durch den Entwickler): SSH- und WinRM-Verbindungen mit echten Servern.
 
 Nicht geprüft: `clippy`, grafische Klickpfade (Statusmeldung bei nicht ladbarem Workspace) und Windows-Versionen außer Windows Server 2022.
+
+## 1.1.0 „Nigge Tied“ – 27. November 2026
+
+Geprüft über GitHub Actions (`windows.yml`, Windows Server 2022, Rust 1.89.0) mit `scripts/ci.ps1`: `cargo fmt --check`; `cargo clippy --all-targets` mit `--all-features` und ohne Features, jeweils `-D warnings`; `cargo test --locked -- --include-ignored` (127 Tests, davon 57 im Hauptprogramm); Parser-Tests für `vte` und Tests für `egui_term`; `scripts/vendor-check.ps1` samt Rundlauf für `-Update`; Release-Build mit `test-tools` und vier PTY-Modi; Neubau wie ausgeliefert und Prüfung auf Exit-Code 2 bei `--directory-test`. `cargo deny check advisories licenses` (`audit.yml`) ohne Befund.
+
+Neu geprüft:
+
+- Übersetzung: Jeder Text, der im Quellcode über `tr`/`trf!` läuft, hat einen Eintrag in `src/i18n/nds.rs`; keine verwaisten Einträge; Platzhalter identisch; Rückfall auf Hochdeutsch; `language` in `workspace.json` abwärtskompatibel.
+- Strg+Buchstabe sendet für A bis Z das passende Steuerzeichen (Strg+U = `0x15`).
+- Schriftpfad aus `SystemRoot`/`windir`, UNC und relative Werte abgewiesen; keine Existenzprüfung auf Netzlaufwerken, unveränderte Ordnermeldungen ohne Dateisystemzugriff.
+- Gegenprobe Vendor-Prüfung: Eine undokumentierte Zeile in `vendor/vte-0.15.0/src/lib.rs` ließ die CI fehlschlagen.
+
+Nicht geprüft: Darstellung der plattdeutschen Oberfläche im sichtbaren Fenster, grafische Klickpfade, Windows-Versionen außer Windows Server 2022.
