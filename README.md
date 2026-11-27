@@ -221,6 +221,12 @@ Terminalbilder werden nicht kopiert, durchsucht oder im Workspace gespeichert. Z
 
 ## Darstellung und Grafikeffekte
 
+### Sprache
+
+Unter **Einstellungen → Sprache** stehen **Hochdeutsch** und **Plattdütsk (Ostwestfaolen)** zur Wahl. Die Umstellung wirkt sofort, ohne Neustart, und wird in `workspace.json` gespeichert. Übersetzt sind Menüs, Dialoge, Status- und Fehlermeldungen sowie die Hilfe. Programmausgaben, Shell-Befehle und Fachbegriffe wie Tab, Terminal, Shell oder Workspace bleiben unverändert. Die KI-Schnellaktionen bitten die KI dann um eine Antwort auf Plattdeutsch; die Anweisung selbst bleibt Hochdeutsch, damit die Modelle sie zuverlässig verstehen.
+
+Die Übersetzung liegt in `src/i18n/nds.rs`. Ein Test stellt sicher, dass jeder Text der Oberfläche übersetzt ist und Platzhalter wie `{name}` erhalten bleiben.
+
 ### Schrift und Transparenz
 
 Die Schriftgröße lässt sich zwischen **10 und 28** einstellen. Wenn vorhanden, wird Consolas geladen; ansonsten greift die Schriftkonfiguration des Renderers.

@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -66,7 +67,7 @@ pub fn atomic_write_json(path: &Path, bytes: &[u8]) -> Result<(), String> {
     use std::io::Write;
     if let Ok(meta) = std::fs::symlink_metadata(path) {
         if meta.file_type().is_symlink() {
-            return Err("Symbolische Links werden nicht überschrieben.".into());
+            return Err(tr("Symbolische Links werden nicht überschrieben.").into());
         }
     }
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -150,7 +151,7 @@ pub fn backup_unloadable(path: &Path) -> Result<PathBuf, String> {
         }
         return Ok(backup);
     }
-    Err("Kein freier Name für die Sicherungskopie gefunden.".into())
+    Err(tr("Kein freier Name für die Sicherungskopie gefunden.").into())
 }
 
 /// Set when `workspace.json` existed but could not be loaded.
@@ -165,14 +166,14 @@ impl WorkspaceGuard {
     pub fn check(&self, explicit: bool) -> Result<(), String> {
         match (&self.backup, explicit) {
             (Some(_), true) => Ok(()),
-            (Some(backup), false) => Err(format!(
-                "Nicht gespeichert: workspace.json konnte nicht geladen werden ({}). Eine Kopie liegt unter {}. Mit „Workspace speichern“ wird die Datei bewusst ersetzt.",
-                self.reason,
-                backup.display()
+            (Some(backup), false) => Err(trf!(
+                "Nicht gespeichert: workspace.json konnte nicht geladen werden ({reason}). Eine Kopie liegt unter {backup}. Mit „Workspace speichern“ wird die Datei bewusst ersetzt.",
+                reason = self.reason,
+                backup = backup.display()
             )),
-            (None, _) => Err(format!(
-                "Nicht gespeichert: workspace.json konnte nicht geladen und nicht gesichert werden ({}). Bitte die Datei prüfen oder beiseitelegen und TerminalVelocity neu starten.",
-                self.reason
+            (None, _) => Err(trf!(
+                "Nicht gespeichert: workspace.json konnte nicht geladen und nicht gesichert werden ({reason}). Bitte die Datei prüfen oder beiseitelegen und TerminalVelocity neu starten.",
+                reason = self.reason
             )),
         }
     }
@@ -451,7 +452,7 @@ impl Shell {
     ) -> Result<(PathBuf, Vec<String>), String> {
         // The key is hex only, so it is safe inside PowerShell and CMD strings.
         if !cwd_token.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err("Ungültiger Sitzungsschlüssel".into());
+            return Err(tr("Ungültiger Sitzungsschlüssel").into());
         }
         if *self == Self::PowerShell {
             let mut script = "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:Path;".to_string();
@@ -520,7 +521,7 @@ impl Shell {
         }
         let host = Self::PowerShell
             .resolve(None, app_dir)
-            .ok_or_else(|| "PowerShell 7 als Host für KI-CLIs nicht gefunden".to_string())?;
+            .ok_or_else(|| tr("PowerShell 7 als Host für KI-CLIs nicht gefunden").to_string())?;
         let path = ps_literal(&executable.to_string_lossy());
         let option = if version_only {
             " --version"
@@ -644,6 +645,8 @@ pub struct Workspace {
     pub acrylic: bool,
     pub compatibility_transparency: bool,
     pub font_size: f32,
+    /// UI language; older files without the field load as Hochdeutsch.
+    pub language: crate::i18n::Language,
     pub default_shell: Shell,
     pub default_directory: Option<PathBuf>,
     pub shell_paths: Vec<String>,
@@ -664,6 +667,7 @@ impl Default for Workspace {
             acrylic: false,
             compatibility_transparency: true,
             font_size: 16.0,
+            language: crate::i18n::Language::German,
             default_shell: Shell::PowerShell,
             default_directory: None,
             shell_paths: vec![String::new(); Shell::ALL.len()],
@@ -711,13 +715,13 @@ impl Workspace {
         self.effects.validate();
         self.background.validate();
         if self.connections.len() > 128 {
-            return Err("Maximal 128 gespeicherte Verbindungen.".into());
+            return Err(tr("Maximal 128 gespeicherte Verbindungen.").into());
         }
         let mut names = std::collections::HashSet::new();
         for connection in &self.connections {
             connection.validate()?;
             if !names.insert(connection.name.trim().to_lowercase()) {
-                return Err("Verbindungsname bereits vorhanden.".into());
+                return Err(tr("Verbindungsname bereits vorhanden.").into());
             }
         }
         self.shell_paths.resize(Shell::ALL.len(), String::new());
@@ -728,19 +732,19 @@ impl Workspace {
                 || value.chars().any(char::is_control)
                 || (!trimmed.is_empty() && is_unc_or_device_path(Path::new(trimmed)))
             {
-                return Err("Ungültiger Programmpfad".into());
+                return Err(tr("Ungültiger Programmpfad").into());
             }
         }
         if let Some(dir) = &self.default_directory {
             if !is_local_absolute_path(dir) {
-                return Err("Ungültiger Standardordner".into());
+                return Err(tr("Ungültiger Standardordner").into());
             }
         }
         if self.version != 1 {
-            return Err("Unbekannte Workspace-Version".into());
+            return Err(tr("Unbekannte Workspace-Version").into());
         }
         if self.tabs.len() > 32 {
-            return Err("Maximal 32 Tabs pro Workspace".into());
+            return Err(tr("Maximal 32 Tabs pro Workspace").into());
         }
         let mut ids = std::collections::HashSet::new();
         fn walk(
@@ -749,7 +753,7 @@ impl Workspace {
             ids: &mut std::collections::HashSet<u64>,
         ) -> Result<(), String> {
             if depth > 10 {
-                return Err("Zu tief verschachteltes Layout".into());
+                return Err(tr("Zu tief verschachteltes Layout").into());
             }
             match node {
                 Node::Pane(p) => {
@@ -757,10 +761,12 @@ impl Workspace {
                         remote.validate()?;
                     }
                     if !is_local_absolute_path(&p.directory) {
-                        return Err("Alle Bereichsordner müssen lokale absolute Pfade sein.".into());
+                        return Err(
+                            tr("Alle Bereichsordner müssen lokale absolute Pfade sein.").into()
+                        );
                     }
                     if !ids.insert(p.id) || p.id > 1_000_000 || ids.len() > 64 {
-                        return Err("Ungültige oder zu viele Bereiche".into());
+                        return Err(tr("Ungültige oder zu viele Bereiche").into());
                     }
                 }
                 Node::Split {
@@ -785,7 +791,7 @@ impl Workspace {
                 || tab.name.chars().count() > 120
                 || tab.name.chars().any(char::is_control)
             {
-                return Err("Ungültiger Tab-Name".into());
+                return Err(tr("Ungültiger Tab-Name").into());
             }
             walk(&mut tab.root, 0, &mut ids)?;
         }
@@ -805,18 +811,18 @@ impl Workspace {
     pub fn load(path: &Path) -> Result<Self, String> {
         use std::io::Read;
         if is_unc_or_device_path(path) {
-            return Err("Ungültiger Workspace-Pfad.".into());
+            return Err(tr("Ungültiger Workspace-Pfad.").into());
         }
         let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
         if !file.metadata().map_err(|e| e.to_string())?.is_file() {
-            return Err("Workspace-Pfad ist keine reguläre Datei.".into());
+            return Err(tr("Workspace-Pfad ist keine reguläre Datei.").into());
         }
         let mut bytes = Vec::new();
         file.take(2_000_001)
             .read_to_end(&mut bytes)
             .map_err(|e| e.to_string())?;
         if bytes.len() > 2_000_000 {
-            return Err("Workspace-Datei ist zu groß.".into());
+            return Err(tr("Workspace-Datei ist zu groß.").into());
         }
         let mut state: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         state.validate()?;

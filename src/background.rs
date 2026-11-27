@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -64,7 +65,7 @@ impl Cache {
             let result = match rx.try_recv() {
                 Ok(result) => Some(result),
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    Some(Err("Bildladeprozess wurde beendet.".into()))
+                    Some(Err(tr("Bildladeprozess wurde beendet.").into()))
                 }
                 Err(mpsc::TryRecvError::Empty) => None,
             };
@@ -119,26 +120,26 @@ impl Cache {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, settings: &mut Settings, owner: *mut std::ffi::c_void) {
-        ui.label("Eigenes Hintergrundbild");
-        ui.checkbox(&mut settings.enabled, "Hintergrundbild anzeigen");
+        ui.label(tr("Eigenes Hintergrundbild"));
+        ui.checkbox(&mut settings.enabled, tr("Hintergrundbild anzeigen"));
         let draft = self.draft.get_or_insert_with(|| settings.path.clone());
         ui.add(
             egui::TextEdit::singleline(draft)
                 .desired_width(450.0)
-                .hint_text("Bildpfad – PNG, JPEG, WebP oder BMP"),
+                .hint_text(tr("Bildpfad – PNG, JPEG, WebP oder BMP")),
         );
         let mut chosen = None;
         ui.horizontal(|ui| {
-            if ui.button("Datei auswählen …").clicked() {
+            if ui.button(tr("Datei auswählen …")).clicked() {
                 match choose_file(owner) {
                     Ok(path) => chosen = path,
                     Err(e) => self.error = Some(e),
                 }
             }
-            if ui.button("Laden / neu laden").clicked() {
+            if ui.button(tr("Laden / neu laden")).clicked() {
                 chosen = Some(PathBuf::from(draft.trim().trim_matches('"')));
             }
-            if ui.button("Entfernen").clicked() {
+            if ui.button(tr("Entfernen")).clicked() {
                 settings.enabled = false;
                 settings.path.clear();
                 draft.clear();
@@ -155,21 +156,21 @@ impl Cache {
             self.texture = None;
             self.error = None;
         }
-        ui.add(egui::Slider::new(&mut settings.darkness, 0.0..=1.0).text("Abdunklung"));
+        ui.add(egui::Slider::new(&mut settings.darkness, 0.0..=1.0).text(tr("Abdunklung")));
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut settings.cover, true, "Ausfüllen");
-            ui.selectable_value(&mut settings.cover, false, "Einpassen");
+            ui.selectable_value(&mut settings.cover, true, tr("Ausfüllen"));
+            ui.selectable_value(&mut settings.cover, false, tr("Einpassen"));
         });
         if self.pending.is_some() {
-            ui.label("Bild wird geladen …");
+            ui.label(tr("Bild wird geladen …"));
         }
         if let Some(error) = &self.error {
             ui.colored_label(egui::Color32::LIGHT_RED, error);
         }
         if settings.enabled && settings.path.is_empty() {
-            ui.weak("Bitte zuerst ein Bild auswählen.");
+            ui.weak(tr("Bitte zuerst ein Bild auswählen."));
         }
-        ui.small("Gespeichert wird der Dateipfad, keine Kopie des Bildes. Relative Pfade gelten zum Programmordner. Die Grafikeffekt-Presets lassen sich unabhängig ein- und ausschalten.");
+        ui.small(tr("Gespeichert wird der Dateipfad, keine Kopie des Bildes. Relative Pfade gelten zum Programmordner. Die Grafikeffekt-Presets lassen sich unabhängig ein- und ausschalten."));
     }
 }
 
@@ -184,22 +185,22 @@ fn load_image(path: &Path) -> Result<egui::ColorImage, String> {
 pub(crate) fn load_rgba(path: &Path) -> Result<image::RgbaImage, String> {
     use std::io::Read;
     if crate::model::is_unc_or_device_path(path) {
-        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
+        return Err(tr("Netzwerk- und Gerätepfade werden nicht unterstützt.").into());
     }
-    let file = std::fs::File::open(path).map_err(|e| format!("Bild nicht geöffnet: {e}"))?;
+    let file = std::fs::File::open(path).map_err(|e| trf!("Bild nicht geöffnet: {e}", e = e))?;
     if path
         .canonicalize()
         .map(|c| crate::model::is_unc_or_device_path(&c))
         .unwrap_or(true)
     {
-        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
+        return Err(tr("Netzwerk- und Gerätepfade werden nicht unterstützt.").into());
     }
     let mut bytes = Vec::new();
     file.take(32 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
     if bytes.len() > 32 * 1024 * 1024 {
-        return Err("Bilddatei ist größer als 32 MiB.".into());
+        return Err(tr("Bilddatei ist größer als 32 MiB.").into());
     }
     decode_rgba(&bytes)
 }

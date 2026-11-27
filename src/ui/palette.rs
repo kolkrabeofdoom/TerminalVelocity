@@ -48,16 +48,16 @@ impl TerminalApp {
         let mut entries = Vec::new();
         for shell in Shell::ALL {
             entries.push((
-                format!("Neuer Tab: {}", shell.label()),
+                trf!("Neuer Tab: {shell}", shell = shell.label()),
                 PaletteAction::NewTab(shell),
             ));
             if !self.editor.active {
                 entries.push((
-                    format!("Nebeneinander teilen: {}", shell.label()),
+                    trf!("Nebeneinander teilen: {shell}", shell = shell.label()),
                     PaletteAction::Split(Axis::Columns, shell),
                 ));
                 entries.push((
-                    format!("Untereinander teilen: {}", shell.label()),
+                    trf!("Untereinander teilen: {shell}", shell = shell.label()),
                     PaletteAction::Split(Axis::Rows, shell),
                 ));
             }
@@ -68,23 +68,30 @@ impl TerminalApp {
             let c = &self.workspace.connections[index];
             let star = if c.favorite { "★ " } else { "" };
             entries.push((
-                format!("Verbinden (Neuer Tab): {star}{} · {}", c.name, c.label()),
+                trf!(
+                    "Verbinden (Neuer Tab): {star}{name} · {target}",
+                    star = star,
+                    name = c.name,
+                    target = c.label()
+                ),
                 PaletteAction::OpenRemote(c.clone(), 0),
             ));
             if !self.editor.active {
                 entries.push((
-                    format!(
-                        "Verbinden (Nebeneinander): {star}{} · {}",
-                        c.name,
-                        c.label()
+                    trf!(
+                        "Verbinden (Nebeneinander): {star}{name} · {target}",
+                        star = star,
+                        name = c.name,
+                        target = c.label()
                     ),
                     PaletteAction::OpenRemote(c.clone(), 1),
                 ));
                 entries.push((
-                    format!(
-                        "Verbinden (Untereinander): {star}{} · {}",
-                        c.name,
-                        c.label()
+                    trf!(
+                        "Verbinden (Untereinander): {star}{name} · {target}",
+                        star = star,
+                        name = c.name,
+                        target = c.label()
                     ),
                     PaletteAction::OpenRemote(c.clone(), 2),
                 ));
@@ -92,52 +99,56 @@ impl TerminalApp {
         }
         for (index, profile) in self.profiles.profiles.iter().enumerate() {
             entries.push((
-                format!(
-                    "Projekt öffnen: {} ({})",
-                    profile.name,
-                    profile.directory.display()
+                trf!(
+                    "Projekt öffnen: {name} ({directory})",
+                    name = profile.name,
+                    directory = profile.directory.display()
                 ),
                 PaletteAction::OpenProfile(index, profile.directory.clone()),
             ));
         }
         for (index, tab) in self.workspace.tabs.iter().enumerate() {
             entries.push((
-                format!("Wechseln zu Tab {}: {}", index + 1, tab.name),
+                trf!(
+                    "Wechseln zu Tab {number}: {name}",
+                    number = index + 1,
+                    name = tab.name
+                ),
                 PaletteAction::SwitchTab(index),
             ));
         }
         entries.extend([
-            ("Editor öffnen".into(), PaletteAction::ActivateEditor),
+            (tr("Editor öffnen").into(), PaletteAction::ActivateEditor),
             (
-                "Verlauf durchsuchen (Strg+F)".into(),
+                tr("Verlauf durchsuchen (Strg+F)").into(),
                 PaletteAction::ShowSearch,
             ),
             (
-                "Remote-Verbindungen verwalten …".into(),
+                tr("Remote-Verbindungen verwalten …").into(),
                 PaletteAction::ShowRemoteDialog,
             ),
             (
-                "Projekt öffnen …".into(),
+                tr("Projekt öffnen …").into(),
                 PaletteAction::ShowProfiles(false),
             ),
             (
-                "Projektprofil speichern …".into(),
+                tr("Projektprofil speichern …").into(),
                 PaletteAction::ShowProfiles(true),
             ),
             (
-                "Workspace speichern (Strg+Umschalt+S)".into(),
+                tr("Workspace speichern (Strg+Umschalt+S)").into(),
                 PaletteAction::SaveWorkspace,
             ),
             (
-                "Einstellungen öffnen / schließen".into(),
+                tr("Einstellungen öffnen / schließen").into(),
                 PaletteAction::ToggleSettings,
             ),
             (
-                "Hilfe & Tastenkürzel (F1)".into(),
+                tr("Hilfe & Tastenkürzel (F1)").into(),
                 PaletteAction::ToggleHelp,
             ),
             (
-                "Über TerminalVelocity & Release Notes".into(),
+                tr("Über TerminalVelocity & Release Notes").into(),
                 PaletteAction::ToggleAbout,
             ),
         ]);
@@ -148,7 +159,7 @@ impl TerminalApp {
             effects::Preset::DeepSpace,
         ] {
             entries.push((
-                format!("Grafikeffekt-Preset: {}", preset.label()),
+                trf!("Grafikeffekt-Preset: {preset}", preset = preset.label()),
                 PaletteAction::SetPreset(preset),
             ));
         }
@@ -201,7 +212,7 @@ impl TerminalApp {
             }
             PaletteAction::SetPreset(preset) => {
                 self.workspace.effects.preset = preset;
-                self.status = format!("Grafikeffekt-Preset: {}", preset.label());
+                self.status = trf!("Grafikeffekt-Preset: {preset}", preset = preset.label());
             }
         }
     }
@@ -236,7 +247,7 @@ impl TerminalApp {
             .then(|| filtered.get(palette.selected).map(|(_, a)| a.clone()))
             .flatten();
         let mut open = true;
-        egui::Window::new("Befehlspalette · Strg+Umschalt+P")
+        egui::Window::new(tr("Befehlspalette · Strg+Umschalt+P"))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
@@ -246,7 +257,7 @@ impl TerminalApp {
                 let response = ui.add(
                     egui::TextEdit::singleline(&mut palette.query)
                         .desired_width(f32::INFINITY)
-                        .hint_text("Shell, KI, Verbindung, Profil oder Aktion suchen …"),
+                        .hint_text(tr("Shell, KI, Verbindung, Profil oder Aktion suchen …")),
                 );
                 if palette.focus_input {
                     response.request_focus();
@@ -255,15 +266,15 @@ impl TerminalApp {
                 if response.changed() {
                     palette.selected = 0;
                 }
-                ui.small(
+                ui.small(tr(
                     "Pfeil hoch/runter: Auswahl · Enter oder Klick: Ausführen · Esc: Schließen",
-                );
+                ));
                 ui.separator();
                 egui::ScrollArea::vertical()
                     .max_height(280.0)
                     .show(ui, |ui| {
                         if filtered.is_empty() {
-                            ui.weak("Keine passende Aktion gefunden.");
+                            ui.weak(tr("Keine passende Aktion gefunden."));
                         }
                         for (index, (label, action)) in filtered.iter().enumerate() {
                             let item = ui.selectable_label(index == palette.selected, label);

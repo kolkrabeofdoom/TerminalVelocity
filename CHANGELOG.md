@@ -2,6 +2,7 @@
 
 ## Unveröffentlicht
 
+- **Plattdütsk (Ostwestfaolen)**: Neue Oberflächensprache neben Hochdeutsch, umschaltbar unter Einstellungen → Sprache, sofort wirksam. Alle rund 330 Texte der Oberfläche sind übersetzt; KI-Schnellaktionen antworten dann auf Plattdeutsch.
 - **Strg+U löscht wieder die Eingabezeile**: Die Tastenkombination schickte ein `Q` statt des Steuerzeichens `0x15`. In Git Bash und anderen Readline-Shells erschien dadurch ein Q.
 - Abhängigkeiten: `url` 2.5.9 (RUSTSEC-2026-0592), `clipboard-win` 5.4.3 (5.4.1 zurückgezogen).
 - **Consolas auch ohne `C:`**: Die Terminalschrift wird aus `%SystemRoot%\Fonts` geladen statt fest aus `C:\Windows\Fonts`. Liegt Windows auf einem anderen Laufwerk, fiel TerminalVelocity bisher still auf die eingebaute Schrift zurück.

@@ -8,29 +8,29 @@ impl TerminalApp {
             return;
         }
         let mut open = self.help;
-        egui::Window::new("Hilfe · TerminalVelocity")
+        egui::Window::new(tr("Hilfe · TerminalVelocity"))
             .open(&mut open)
             .default_width(640.0)
             .max_height(520.0)
             .vscroll(true)
             .show(ctx, |ui| {
-                ui.heading("Tastenkürzel");
+                ui.heading(tr("Tastenkürzel"));
                 ui.add_space(4.0);
                 egui::Grid::new("help-shortcuts")
                     .striped(true)
                     .spacing([16.0, 4.0])
                     .show(ui, |ui| {
                         for (shortcut, desc) in [
-                            ("F1", "Diese Hilfe öffnen / schließen"),
-                            ("Strg+Umschalt+P", "Befehlspalette öffnen"),
-                            ("Strg+Umschalt+T", "Neuen Tab öffnen"),
-                            ("Strg+Umschalt+D / E", "Bereich nebeneinander / untereinander teilen"),
-                            ("Strg+Tab / Strg+Umschalt+Rechts", "Nächster Bereich / nächster Tab"),
-                            ("Strg+Umschalt+W", "Aktiven Bereich schließen"),
-                            ("Strg+Umschalt+S", "Workspace speichern (im Editor: Speichern unter)"),
-                            ("Strg+Umschalt+C / V", "Auswahl kopieren / sicher einfügen (Bracketed Paste)"),
-                            ("Strg+F", "Terminalverlauf bzw. Dokument durchsuchen"),
-                            ("Strg+Klick", "Erkannten HTTP(S)-Link im Browser öffnen"),
+                            ("F1", tr("Diese Hilfe öffnen / schließen")),
+                            ("Strg+Umschalt+P", tr("Befehlspalette öffnen")),
+                            ("Strg+Umschalt+T", tr("Neuen Tab öffnen")),
+                            ("Strg+Umschalt+D / E", tr("Bereich nebeneinander / untereinander teilen")),
+                            ("Strg+Tab / Strg+Umschalt+Rechts", tr("Nächster Bereich / nächster Tab")),
+                            ("Strg+Umschalt+W", tr("Aktiven Bereich schließen")),
+                            ("Strg+Umschalt+S", tr("Workspace speichern (im Editor: Speichern unter)")),
+                            ("Strg+Umschalt+C / V", tr("Auswahl kopieren / sicher einfügen (Bracketed Paste)")),
+                            ("Strg+F", tr("Terminalverlauf bzw. Dokument durchsuchen")),
+                            ("Strg+Klick", tr("Erkannten HTTP(S)-Link im Browser öffnen")),
                         ] {
                             ui.monospace(shortcut);
                             ui.label(desc);
@@ -38,24 +38,24 @@ impl TerminalApp {
                         }
                     });
                 ui.separator();
-                ui.heading("Bedienung & Funktionen");
+                ui.heading(tr("Bedienung & Funktionen"));
                 ui.add_space(4.0);
                 for (title, body) in [
                     (
-                        "Dateipfade, Stacktraces & Auswahl im Editor",
-                        "Rechtsklick auf einen lokalen Dateipfad oder eine Compiler-/Fehlermeldung (z. B. src\\main.rs:142:5) → „Datei im Editor öffnen (Zeile X)“. Markierter Text lässt sich per Rechtsklick als ungespeichertes Dokument in den Editor übernehmen.",
+                        tr("Dateipfade, Stacktraces & Auswahl im Editor"),
+                        tr("Rechtsklick auf einen lokalen Dateipfad oder eine Compiler-/Fehlermeldung (z. B. src\\main.rs:142:5) → „Datei im Editor öffnen (Zeile X)“. Markierter Text lässt sich per Rechtsklick als ungespeichertes Dokument in den Editor übernehmen."),
                     ),
                     (
-                        "KI-Übergabe & Shells",
-                        "PowerShell 7, CMD, Git Bash sowie Codex, Claude, Antigravity (agy.exe) und OpenAI CLI lassen sich oben oder über die Befehlspalette starten. Markierter Text kann über das Kontextmenü geprüft an eine neue KI-Sitzung übergeben werden.",
+                        tr("KI-Übergabe & Shells"),
+                        tr("PowerShell 7, CMD, Git Bash sowie Codex, Claude, Antigravity (agy.exe) und OpenAI CLI lassen sich oben oder über die Befehlspalette starten. Markierter Text kann über das Kontextmenü geprüft an eine neue KI-Sitzung übergeben werden."),
                     ),
                     (
-                        "Remote & Projektprofile",
-                        "Unter „Verbinden …“ lassen sich SSH- und PowerShell-WinRM-Ziele speichern. „Projekt speichern …“ sichert komplette Tab- und Split-Layouts inkl. relativer Unterordner als Vorlage.",
+                        tr("Remote & Projektprofile"),
+                        tr("Unter „Verbinden …“ lassen sich SSH- und PowerShell-WinRM-Ziele speichern. „Projekt speichern …“ sichert komplette Tab- und Split-Layouts inkl. relativer Unterordner als Vorlage."),
                     ),
                     (
-                        "Bilder & Benachrichtigungen",
-                        "PNG, JPEG, WebP und BMP lassen sich per Drag-and-drop, Dateiauswahl oder Rechtsklick sowie über Sixel direkt im Terminal anzeigen. Ein farbiger Punkt (●) an Tabs/Bereichen meldet Glockensignale oder beendete Hintergrundsitzungen.",
+                        tr("Bilder & Benachrichtigungen"),
+                        tr("PNG, JPEG, WebP und BMP lassen sich per Drag-and-drop, Dateiauswahl oder Rechtsklick sowie über Sixel direkt im Terminal anzeigen. Ein farbiger Punkt (●) an Tabs/Bereichen meldet Glockensignale oder beendete Hintergrundsitzungen."),
                     ),
                 ] {
                     ui.strong(title);
@@ -86,7 +86,7 @@ impl TerminalApp {
             }
         }
         let mut open = self.about;
-        egui::Window::new("Über TerminalVelocity")
+        egui::Window::new(tr("Über TerminalVelocity"))
             .open(&mut open)
             .default_width(640.0)
             .max_height(580.0)
@@ -111,7 +111,7 @@ impl TerminalApp {
                             .color(Color32::from_rgb(100, 210, 190)),
                     );
                 });
-                ui.label("Portables Windows-Terminal mit Split-Bereichen, KI-CLI-Integration, SSH/WinRM, integriertem UTF-8-Editor und Sixel-/Bildanzeige.");
+                ui.label(tr("Portables Windows-Terminal mit Split-Bereichen, KI-CLI-Integration, SSH/WinRM, integriertem UTF-8-Editor und Sixel-/Bildanzeige."));
                 ui.small("MIT-Lizenz · Rust + egui/eframe + ConPTY");
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
@@ -127,7 +127,7 @@ impl TerminalApp {
                     );
                 });
                 ui.separator();
-                ui.strong("Aktuelle Release Notes");
+                ui.strong(tr("Aktuelle Release Notes"));
                 ui.add_space(4.0);
                 egui::ScrollArea::vertical()
                     .max_height(340.0)

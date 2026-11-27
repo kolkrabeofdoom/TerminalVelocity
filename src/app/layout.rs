@@ -29,7 +29,7 @@ impl TerminalApp {
 
     pub(crate) fn add_tab_with_shell(&mut self, ctx: &egui::Context, shell: Shell) {
         if self.workspace.tabs.len() >= 32 || self.sessions.len() >= 64 {
-            self.status = "Limit: 32 Tabs / 64 Bereiche".into();
+            self.status = tr("Limit: 32 Tabs / 64 Bereiche").into();
             return;
         }
         let pane = self.new_pane_with_shell(shell);
@@ -52,7 +52,7 @@ impl TerminalApp {
             return;
         }
         if self.sessions.len() >= 64 {
-            self.status = "Maximal 64 Bereiche".into();
+            self.status = tr("Maximal 64 Bereiche").into();
             return;
         }
         let pane = self.new_pane_with_shell(shell);

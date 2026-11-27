@@ -41,7 +41,7 @@ impl TerminalApp {
                 error: None,
             });
         } else {
-            self.status = "In diesem Bereich ist kein Terminalverlauf verfügbar.".into();
+            self.status = tr("In diesem Bereich ist kein Terminalverlauf verfügbar.").into();
         }
     }
 
@@ -72,12 +72,12 @@ impl TerminalApp {
             .frame(egui::Frame::NONE.fill(background).inner_margin(6.0))
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("Verlauf durchsuchen");
+                    ui.label(tr("Verlauf durchsuchen"));
                     let response = ui.add(
                         egui::TextEdit::singleline(&mut search.query)
                             .id_salt("history-query")
                             .desired_width(280.0)
-                            .hint_text("Suchtext (Groß-/Kleinschreibung beachten)"),
+                            .hint_text(tr("Suchtext (Groß-/Kleinschreibung beachten)")),
                     );
                     if search.focus_input {
                         response.request_focus();
@@ -88,21 +88,21 @@ impl TerminalApp {
                     }
                     let (active, count, truncated) = backend.search_status();
                     ui.label(if search.query.is_empty() {
-                        "Suchtext eingeben".into()
+                        tr("Suchtext eingeben").into()
                     } else if count == 0 {
-                        "Keine Treffer".into()
+                        tr("Keine Treffer").into()
                     } else {
                         format!("{active} / {count}{}", if truncated { "+" } else { "" })
                     });
                     previous |= ui
-                        .add_enabled(count > 0, egui::Button::new("Zurück"))
+                        .add_enabled(count > 0, egui::Button::new(tr("Zurück")))
                         .on_hover_text("Umschalt+Enter")
                         .clicked();
                     next |= ui
-                        .add_enabled(count > 0, egui::Button::new("Weiter"))
+                        .add_enabled(count > 0, egui::Button::new(tr("Weiter")))
                         .on_hover_text("Enter")
                         .clicked();
-                    close |= ui.button("Schließen (Esc)").clicked();
+                    close |= ui.button(tr("Schließen (Esc)")).clicked();
                     if let Some(error) = &search.error {
                         ui.colored_label(Color32::LIGHT_RED, error);
                     }

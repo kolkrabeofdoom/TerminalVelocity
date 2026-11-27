@@ -121,8 +121,8 @@ impl eframe::App for TerminalApp {
                 ui.horizontal_wrapped(|ui| {
                     ui.strong("TERMINALVELOCITY");
                     if ui
-                        .add_enabled(dialog_free, egui::Button::new("Befehle …"))
-                        .on_hover_text("Befehlspalette · Strg+Umschalt+P")
+                        .add_enabled(dialog_free, egui::Button::new(tr("Befehle …")))
+                        .on_hover_text(tr("Befehlspalette · Strg+Umschalt+P"))
                         .clicked()
                     {
                         self.show_palette();
@@ -132,7 +132,7 @@ impl eframe::App for TerminalApp {
                         self.editor.activate();
                     }
                     if ui
-                        .add_enabled(dialog_free, egui::Button::new("Verbinden …"))
+                        .add_enabled(dialog_free, egui::Button::new(tr("Verbinden …")))
                         .clicked()
                     {
                         self.close_search();
@@ -163,58 +163,58 @@ impl eframe::App for TerminalApp {
                         self.add_tab(ctx);
                     }
                     if ui
-                        .add_enabled(!self.editor.active, egui::Button::new("Nebeneinander"))
-                        .on_hover_text("Vertikale Trennlinie · Strg+Umschalt+D")
+                        .add_enabled(!self.editor.active, egui::Button::new(tr("Nebeneinander")))
+                        .on_hover_text(tr("Vertikale Trennlinie · Strg+Umschalt+D"))
                         .clicked()
                     {
                         self.split(ctx, Axis::Columns);
                     }
                     if ui
-                        .add_enabled(!self.editor.active, egui::Button::new("Untereinander"))
-                        .on_hover_text("Horizontale Trennlinie · Strg+Umschalt+E")
+                        .add_enabled(!self.editor.active, egui::Button::new(tr("Untereinander")))
+                        .on_hover_text(tr("Horizontale Trennlinie · Strg+Umschalt+E"))
                         .clicked()
                     {
                         self.split(ctx, Axis::Rows);
                     }
                     if ui
-                        .button("Workspace speichern")
+                        .button(tr("Workspace speichern"))
                         .on_hover_text("Strg+Umschalt+S")
                         .clicked()
                     {
                         self.save_workspace_explicit();
                     }
-                    if ui.button("Einstellungen").clicked() {
+                    if ui.button(tr("Einstellungen")).clicked() {
                         self.settings = !self.settings;
                     }
                     if ui
-                        .add_enabled(dialog_free, egui::Button::new("Suchen"))
-                        .on_hover_text("Strg+F · Aktiven Terminalverlauf durchsuchen")
+                        .add_enabled(dialog_free, egui::Button::new(tr("Suchen")))
+                        .on_hover_text(tr("Strg+F · Aktiven Terminalverlauf durchsuchen"))
                         .clicked()
                     {
                         self.show_search();
                     }
                     if ui
-                        .add_enabled(dialog_free, egui::Button::new("Projekt öffnen"))
+                        .add_enabled(dialog_free, egui::Button::new(tr("Projekt öffnen")))
                         .clicked()
                     {
                         self.show_profiles(false);
                     }
                     if ui
-                        .add_enabled(dialog_free, egui::Button::new("Projekt speichern …"))
+                        .add_enabled(dialog_free, egui::Button::new(tr("Projekt speichern …")))
                         .clicked()
                     {
                         self.show_profiles(true);
                     }
                     if ui
-                        .button("Hilfe")
-                        .on_hover_text("Bedienung & Tastenkürzel · F1")
+                        .button(tr("Hilfe"))
+                        .on_hover_text(tr("Bedienung & Tastenkürzel · F1"))
                         .clicked()
                     {
                         self.help = !self.help;
                     }
                     if ui
-                        .button("Über")
-                        .on_hover_text("GitHub-Repository, Version & Release Notes")
+                        .button(tr("Über"))
+                        .on_hover_text(tr("GitHub-Repository, Version & Release Notes"))
                         .clicked()
                     {
                         self.about = !self.about;
@@ -266,7 +266,9 @@ impl eframe::App for TerminalApp {
                 ui.horizontal_wrapped(|ui| {
                     ui.small(&self.status);
                     ui.separator();
-                    ui.small("KI-CLI auswählen → + Tab · Anmeldung direkt beim Anbieter");
+                    ui.small(tr(
+                        "KI-CLI auswählen → + Tab · Anmeldung direkt beim Anbieter",
+                    ));
                 });
             });
         let mut retry_target = None;
@@ -308,17 +310,17 @@ impl eframe::App for TerminalApp {
             let result = match request {
                 editor::Request::OpenFile(path, line) => {
                     let display = match line {
-                        Some(l) => format!("{} (Zeile {l})", path.display()),
+                        Some(l) => trf!("{path} (Zeile {l})", path = path.display(), l = l),
                         None => path.display().to_string(),
                     };
                     self.editor
                         .open_file(path, line, ctx)
-                        .map(|()| format!("Im Editor geöffnet: {display}"))
+                        .map(|()| trf!("Im Editor geöffnet: {display}", display = display))
                 }
                 editor::Request::OpenSelection(text) => self
                     .editor
                     .open_selection(text, ctx)
-                    .map(|()| "Auswahl als neues Dokument im Editor geöffnet".into()),
+                    .map(|()| tr("Auswahl als neues Dokument im Editor geöffnet").into()),
             };
             self.status = match result {
                 Ok(msg) => msg,
@@ -330,7 +332,7 @@ impl eframe::App for TerminalApp {
                 inline_image::Request::Open(id, path) => (id, Ok(Some(path))),
                 inline_image::Request::Choose(id) => (
                     id,
-                    background::choose_image_file(dialog_owner, "Bild im Terminal anzeigen"),
+                    background::choose_image_file(dialog_owner, tr("Bild im Terminal anzeigen")),
                 ),
                 inline_image::Request::Drop(id, files) => {
                     (id, inline_image::dropped_path(files).map(Some))
@@ -339,7 +341,10 @@ impl eframe::App for TerminalApp {
             match path {
                 Ok(Some(path)) => {
                     let result = if !self.workspace.sixel_enabled {
-                        Err("Bitte zuerst die Bildanzeige in den Einstellungen einschalten.".into())
+                        Err(
+                            tr("Bitte zuerst die Bildanzeige in den Einstellungen einschalten.")
+                                .into(),
+                        )
                     } else if let Some(session) = self.sessions.get(&id) {
                         if let Some(backend) = &session.backend {
                             self.image_loader.start(
@@ -349,13 +354,13 @@ impl eframe::App for TerminalApp {
                                 ctx,
                             )
                         } else {
-                            Err("Der Terminalbereich ist nicht verfügbar.".into())
+                            Err(tr("Der Terminalbereich ist nicht verfügbar.").into())
                         }
                     } else {
-                        Err("Der Terminalbereich wurde geschlossen.".into())
+                        Err(tr("Der Terminalbereich wurde geschlossen.").into())
                     };
                     self.status = match result {
-                        Ok(()) => "Bild wird geladen …".into(),
+                        Ok(()) => tr("Bild wird geladen …").into(),
                         Err(error) => error,
                     };
                 }
@@ -366,17 +371,17 @@ impl eframe::App for TerminalApp {
         if let Some((generation, width, result)) = self.image_loader.poll() {
             let result = result.and_then(|image| {
                 if !self.workspace.sixel_enabled {
-                    return Err("Bildanzeige wurde abgeschaltet.".into());
+                    return Err(tr("Bildanzeige wurde abgeschaltet.").into());
                 }
                 let backend = self
                     .sessions
                     .values_mut()
                     .find(|s| s.generation == generation)
                     .and_then(|s| s.backend.as_mut())
-                    .ok_or("Zielsitzung wurde geschlossen oder neu gestartet.")?;
+                    .ok_or(tr("Zielsitzung wurde geschlossen oder neu gestartet."))?;
                 if backend.image_width() != width {
                     return Err(
-                        "Terminalgröße wurde geändert. Bitte das Bild erneut öffnen.".into(),
+                        tr("Terminalgröße wurde geändert. Bitte das Bild erneut öffnen.").into(),
                     );
                 }
                 backend
@@ -388,8 +393,8 @@ impl eframe::App for TerminalApp {
                     .map_err(|e| e.to_string())
             });
             self.status = match result {
-                Ok(()) => "Bild lokal im Terminal angezeigt.".into(),
-                Err(error) => format!("Bild nicht angezeigt: {error}"),
+                Ok(()) => tr("Bild lokal im Terminal angezeigt.").into(),
+                Err(error) => trf!("Bild nicht angezeigt: {error}", error = error),
             };
             ctx.request_repaint();
         }
@@ -409,26 +414,26 @@ impl eframe::App for TerminalApp {
         let mut cancel = false;
         let mut open = true;
         if let Some(draft) = self.ai_draft.as_mut() {
-            egui::Window::new("Markierten Text an KI übergeben").open(&mut open).default_width(650.0).vscroll(true).show(ctx, |ui| {
-                ui.label("Prüfe und bearbeite den Text. Gesendet wird erst nach Klick auf „Senden“.");
+            egui::Window::new(tr("Markierten Text an KI übergeben")).open(&mut open).default_width(650.0).vscroll(true).show(ctx, |ui| {
+                ui.label(tr("Prüfe und bearbeite den Text. Gesendet wird erst nach Klick auf „Senden“."));
                 ui.horizontal(|ui| {
-                    ui.label("Anbieter");
+                    ui.label(tr("Anbieter"));
                     egui::ComboBox::from_id_salt("ai-selection-provider").selected_text(draft.provider.label()).show_ui(ui, |ui| {
                         for provider in ai::PROVIDERS { ui.selectable_value(&mut draft.provider, provider, provider.label()); }
                     });
                 });
-                ui.label("Lokaler Projektordner (KI läuft auf diesem Computer)");
+                ui.label(tr("Lokaler Projektordner (KI läuft auf diesem Computer)"));
                 let mut path = draft.directory.display().to_string();
                 if ui.text_edit_singleline(&mut path).changed() { draft.directory = PathBuf::from(path); }
                 if draft.provider == Shell::OpenAI {
                     ui.horizontal(|ui| { ui.label("Modell-ID"); ui.text_edit_singleline(&mut draft.model); });
-                    ui.small("Die OpenAI API benötigt einen eingerichteten API-Schlüssel. Die Antwort erscheint im neuen Tab.");
+                    ui.small(tr("Die OpenAI API benötigt einen eingerichteten API-Schlüssel. Die Antwort erscheint im neuen Tab."));
                 }
                 ui.add(egui::TextEdit::multiline(&mut draft.text).desired_rows(12).desired_width(f32::INFINITY).code_editor());
-                ui.small(format!("{} / {} Zeichen", draft.text.encode_utf16().count(), ai::MAX_PROMPT_UNITS));
-                ui.small("Der Text wird an den gewählten KI-Anbieter übergeben. Es öffnet sich eine neue Sitzung im angegebenen Projektordner.");
+                ui.small(trf!("{count} / {max} Zeichen", count = draft.text.encode_utf16().count(), max = ai::MAX_PROMPT_UNITS));
+                ui.small(tr("Der Text wird an den gewählten KI-Anbieter übergeben. Es öffnet sich eine neue Sitzung im angegebenen Projektordner."));
                 if let Some(error) = &draft.error { ui.colored_label(Color32::LIGHT_RED, error); }
-                ui.horizontal(|ui| { submit = ui.button("Senden und KI-Tab öffnen").clicked(); cancel = ui.button("Abbrechen").clicked(); });
+                ui.horizontal(|ui| { submit = ui.button(tr("Senden und KI-Tab öffnen")).clicked(); cancel = ui.button(tr("Abbrechen")).clicked(); });
             });
         }
         if cancel || !open {
@@ -453,52 +458,65 @@ impl eframe::App for TerminalApp {
         }
         let mut apply_paths = false;
         if self.settings {
-            egui::Window::new("Einstellungen").open(&mut self.settings).resizable(false).vscroll(true).show(ctx, |ui| {
-                ui.checkbox(&mut self.workspace.compatibility_transparency, "Kompatible Fenstertransparenz");
+            egui::Window::new(tr("Einstellungen")).open(&mut self.settings).resizable(false).vscroll(true).show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(tr("Sprache"));
+                    egui::ComboBox::from_id_salt("language")
+                        .selected_text(self.workspace.language.label())
+                        .show_ui(ui, |ui| {
+                            for language in i18n::Language::ALL {
+                                ui.selectable_value(&mut self.workspace.language, language, language.label());
+                            }
+                        });
+                });
+                // Takes effect immediately; egui redraws every text each frame.
+                i18n::set_language(self.workspace.language);
+                ui.separator();
+                ui.checkbox(&mut self.workspace.compatibility_transparency, tr("Kompatible Fenstertransparenz"));
                 let minimum = if self.workspace.compatibility_transparency { 0.2 } else { 0.0 };
-                ui.add(egui::Slider::new(&mut self.workspace.opacity, minimum..=1.0).text("Deckkraft"));
+                ui.add(egui::Slider::new(&mut self.workspace.opacity, minimum..=1.0).text(tr("Deckkraft")));
                 if self.workspace.compatibility_transparency {
                     self.workspace.acrylic = false;
-                    ui.small("Windows mischt das gesamte Fenster mit dem Desktop. Auch Schrift und Bedienelemente werden durchsichtig. 1 = undurchsichtig.");
+                    ui.small(tr("Windows mischt das gesamte Fenster mit dem Desktop. Auch Schrift und Bedienelemente werden durchsichtig. 1 = undurchsichtig."));
                 } else {
-                    ui.small("Nur die Hintergrundflächen werden durchsichtig; benötigt Unterstützung durch den Grafiktreiber.");
+                    ui.small(tr("Nur die Hintergrundflächen werden durchsichtig; benötigt Unterstützung durch den Grafiktreiber."));
                 }
-                ui.add_enabled(!self.workspace.compatibility_transparency, egui::Checkbox::new(&mut self.workspace.acrylic, "Hintergrund weichzeichnen (Windows-Acryl)"));
-                ui.add(egui::Slider::new(&mut self.workspace.font_size, 10.0..=28.0).text("Schriftgröße"));
+                ui.add_enabled(!self.workspace.compatibility_transparency, egui::Checkbox::new(&mut self.workspace.acrylic, tr("Hintergrund weichzeichnen (Windows-Acryl)")));
+                ui.add(egui::Slider::new(&mut self.workspace.font_size, 10.0..=28.0).text(tr("Schriftgröße")));
                 ui.separator();
-                ui.checkbox(&mut self.workspace.sixel_enabled, "Bilder im Terminal anzeigen (Sixel und lokale Dateien)");
-                ui.small("Bis 4096 Pixel pro Seite, 2 Megapixel je Bild; 16 MiB Bilddaten je Bildschirm. Größenänderungen löschen Bilder. Abschalten entfernt gespeicherte Grafiken.");
-                if let Some(backend) = self.sessions.get(&self.focused).and_then(|s| s.backend.as_ref()) { let (images, rejected) = backend.sixel_status(); ui.small(format!("Aktiver Bereich: {images} Bilder · {rejected} verworfene Bildsequenzen")); }
+                ui.checkbox(&mut self.workspace.sixel_enabled, tr("Bilder im Terminal anzeigen (Sixel und lokale Dateien)"));
+                ui.small(tr("Bis 4096 Pixel pro Seite, 2 Megapixel je Bild; 16 MiB Bilddaten je Bildschirm. Größenänderungen löschen Bilder. Abschalten entfernt gespeicherte Grafiken."));
+                if let Some(backend) = self.sessions.get(&self.focused).and_then(|s| s.backend.as_ref()) { let (images, rejected) = backend.sixel_status(); ui.small(trf!("Aktiver Bereich: {images} Bilder · {rejected} verworfene Bildsequenzen", images = images, rejected = rejected)); }
                 ui.separator();
                 self.workspace.effects.ui(ui);
                 ui.separator();
                 self.background_cache.ui(ui, &mut self.workspace.background, dialog_owner);
                 ui.separator();
-                ui.label("Startordner ohne aktiven Bereich");
-                ui.small("Neue Tabs und Teilungen übernehmen den aktuellen Ordner des aktiven Bereichs. KI-Sitzungen starten im selben Projektordner.");
+                ui.label(tr("Startordner ohne aktiven Bereich"));
+                ui.small(tr("Neue Tabs und Teilungen übernehmen den aktuellen Ordner des aktiven Bereichs. KI-Sitzungen starten im selben Projektordner."));
                 ui.text_edit_singleline(&mut self.directory);
-                if !PathBuf::from(&self.directory).is_dir() { ui.colored_label(Color32::LIGHT_RED, "Dieser Ordner existiert nicht."); }
+                if !PathBuf::from(&self.directory).is_dir() { ui.colored_label(Color32::LIGHT_RED, tr("Dieser Ordner existiert nicht.")); }
                 ui.separator();
-                ui.label("OpenSSH (leer = automatisch erkennen)");
+                ui.label(tr("OpenSSH (leer = automatisch erkennen)"));
                 ui.text_edit_singleline(&mut self.workspace.ssh_path);
-                ui.label("Shells und KI-CLIs (leer = automatisch erkennen)");
+                ui.label(tr("Shells und KI-CLIs (leer = automatisch erkennen)"));
                 egui::ScrollArea::vertical().max_height(330.0).show(ui, |ui| {
                 for shell in Shell::ALL {
                     ui.label(shell.label());
-                    ui.add(egui::TextEdit::singleline(&mut self.workspace.shell_paths[shell as usize]).desired_width(480.0).hint_text("Vollständiger EXE-Pfad oder relativ zum Programmordner"));
+                    ui.add(egui::TextEdit::singleline(&mut self.workspace.shell_paths[shell as usize]).desired_width(480.0).hint_text(tr("Vollständiger EXE-Pfad oder relativ zum Programmordner")));
                     if let Some(path) = shell.resolve(Some(&self.workspace.shell_paths[shell as usize]), &app_dir) {
                         ui.label(egui::RichText::new(path.display().to_string()).small().color(Color32::LIGHT_GREEN));
-                    } else { ui.colored_label(Color32::YELLOW, "Nicht gefunden"); }
+                    } else { ui.colored_label(Color32::YELLOW, tr("Nicht gefunden")); }
                 }
                 });
-                apply_paths = ui.button("Speichern und fehlgeschlagene Sitzungen neu starten").clicked();
-                ui.small("Laufende Sitzungen bleiben aktiv. Geänderte Pfade gelten für neue Sitzungen.");
+                apply_paths = ui.button(tr("Speichern und fehlgeschlagene Sitzungen neu starten")).clicked();
+                ui.small(tr("Laufende Sitzungen bleiben aktiv. Geänderte Pfade gelten für neue Sitzungen."));
                 ui.separator();
-                ui.label("Strg+Umschalt+P: Befehlspalette");
-                ui.label("Strg+Tab: Nächster Bereich");
-                ui.label("Strg+Umschalt+Rechts: Nächster Tab");
-                ui.label("Strg+Umschalt+C / V: Kopieren / Einfügen");
-                ui.small("Layouts werden beim Beenden gespeichert. Prozesse und Ausgaben werden nicht wiederhergestellt.");
+                ui.label(tr("Strg+Umschalt+P: Befehlspalette"));
+                ui.label(tr("Strg+Tab: Nächster Bereich"));
+                ui.label(tr("Strg+Umschalt+Rechts: Nächster Tab"));
+                ui.label(tr("Strg+Umschalt+C / V: Kopieren / Einfügen"));
+                ui.small(tr("Layouts werden beim Beenden gespeichert. Prozesse und Ausgaben werden nicht wiederhergestellt."));
             });
         }
         if self.applied_acrylic != self.workspace.acrylic {
@@ -511,7 +529,8 @@ impl eframe::App for TerminalApp {
                 Ok(()) => self.applied_acrylic = self.workspace.acrylic,
                 Err(error) => {
                     self.workspace.acrylic = self.applied_acrylic;
-                    self.status = format!("Acryl konnte nicht geändert werden: {error}");
+                    self.status =
+                        trf!("Acryl konnte nicht geändert werden: {error}", error = error);
                 }
             }
             ctx.request_repaint();
@@ -526,7 +545,9 @@ impl eframe::App for TerminalApp {
                 Ok(()) => {
                     self.applied_opacity = Some(desired_opacity);
                 }
-                Err(error) => self.status = format!("Fenstertransparenz fehlgeschlagen: {error}"),
+                Err(error) => {
+                    self.status = trf!("Fenstertransparenz fehlgeschlagen: {error}", error = error)
+                }
             }
         }
         if apply_paths {
@@ -544,15 +565,15 @@ impl eframe::App for TerminalApp {
         if let Some(id) = self.restart_target {
             let mut confirm = false;
             let mut cancel = false;
-            egui::Window::new("Sitzung neu starten?").collapsible(false).resizable(false).show(ctx, |ui| {
+            egui::Window::new(tr("Sitzung neu starten?")).collapsible(false).resizable(false).show(ctx, |ui| {
                 if let Some(pane) = self.workspace.panes().into_iter().find(|pane| pane.id == id) {
-                    ui.label(format!("{} · Bereich #{id}", pane.remote.as_ref().map(|r| r.label()).unwrap_or_else(|| pane.shell.label().into())));
-                    ui.label(format!("Projektordner: {}", pane.directory.display()));
+                    ui.label(trf!("{name} · Bereich #{id}", name = pane.remote.as_ref().map(|r| r.label()).unwrap_or_else(|| pane.shell.label().into()), id = id));
+                    ui.label(trf!("Projektordner: {directory}", directory = pane.directory.display()));
                 }
-                ui.label("Laufende Prozesse in diesem Bereich werden beendet. Die Ausgabe wird geleert.");
+                ui.label(tr("Laufende Prozesse in diesem Bereich werden beendet. Die Ausgabe wird geleert."));
                 ui.horizontal(|ui| {
-                    confirm = ui.button("Jetzt neu starten").clicked();
-                    cancel = ui.button("Abbrechen").clicked();
+                    confirm = ui.button(tr("Jetzt neu starten")).clicked();
+                    cancel = ui.button(tr("Abbrechen")).clicked();
                 });
             });
             if confirm {
@@ -566,16 +587,17 @@ impl eframe::App for TerminalApp {
         if let Some(id) = self.close_target {
             let mut confirm = false;
             let mut cancel = false;
-            egui::Window::new("Sitzung schließen?")
+            egui::Window::new(tr("Sitzung schließen?"))
                 .collapsible(false)
                 .resizable(false)
                 .show(ctx, |ui| {
-                    ui.label(format!(
-                        "Bereich #{id} und die zugehörige Shell werden beendet."
+                    ui.label(trf!(
+                        "Bereich #{id} und die zugehörige Shell werden beendet.",
+                        id = id
                     ));
                     ui.horizontal(|ui| {
-                        confirm = ui.button("Sitzung beenden").clicked();
-                        cancel = ui.button("Abbrechen").clicked();
+                        confirm = ui.button(tr("Sitzung beenden")).clicked();
+                        cancel = ui.button(tr("Abbrechen")).clicked();
                     });
                 });
             if confirm {

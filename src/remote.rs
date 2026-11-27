@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 use crate::model::{Shell, Workspace};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -47,7 +48,7 @@ impl Connection {
             || self.name.chars().count() > 80
             || self.name.chars().any(char::is_control)
         {
-            return Err("Verbindungsname: 1 bis 80 Zeichen erforderlich.".into());
+            return Err(tr("Verbindungsname: 1 bis 80 Zeichen erforderlich.").into());
         }
         if self.host.is_empty()
             || self.host.len() > 253
@@ -57,21 +58,21 @@ impl Connection {
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || ".-_:[]%".contains(c))
         {
-            return Err("Bitte einen Hostnamen, eine IP-Adresse oder einen SSH-Hostalias eingeben (ohne Konto oder Optionen).".into());
+            return Err(tr("Bitte einen Hostnamen, eine IP-Adresse oder einen SSH-Hostalias eingeben (ohne Konto oder Optionen).").into());
         }
         for value in [&self.user, &self.key_file, &self.endpoint] {
             if value.len() > 4096 || value.chars().any(char::is_control) {
-                return Err("Konto, Schlüsselpfad und Endpunkt dürfen keine Steuerzeichen enthalten und höchstens 4096 Bytes lang sein.".into());
+                return Err(tr("Konto, Schlüsselpfad und Endpunkt dürfen keine Steuerzeichen enthalten und höchstens 4096 Bytes lang sein.").into());
             }
         }
         if self.port == Some(0) {
-            return Err("Der Port muss zwischen 1 und 65535 liegen.".into());
+            return Err(tr("Der Port muss zwischen 1 und 65535 liegen.").into());
         }
         if !self.key_file.is_empty()
             && (self.key_file.contains('"')
                 || !crate::model::is_local_absolute_path(Path::new(&self.key_file)))
         {
-            return Err("Bitte einen absoluten Pfad zur Schlüsseldatei angeben.".into());
+            return Err(tr("Bitte einen absoluten Pfad zur Schlüsseldatei angeben.").into());
         }
         Ok(())
     }
@@ -127,21 +128,21 @@ impl Connection {
         match self.transport {
             Transport::Ssh => {
                 if !self.key_file.is_empty() && !Path::new(&self.key_file).is_file() {
-                    return Err("Die SSH-Schlüsseldatei wurde nicht gefunden.".into());
+                    return Err(tr("Die SSH-Schlüsseldatei wurde nicht gefunden.").into());
                 }
                 Ok((
-                    ssh_executable(&workspace.ssh_path, base).ok_or(
+                    ssh_executable(&workspace.ssh_path, base).ok_or(tr(
                         "OpenSSH ssh.exe nicht gefunden. Bitte den Pfad in Einstellungen angeben.",
-                    )?,
+                    ))?,
                     self.ssh_args()?,
                 ))
             }
             Transport::WinRm => {
                 let program = Shell::PowerShell
                     .resolve(workspace.shell_paths.first().map(String::as_str), base)
-                    .ok_or(
+                    .ok_or(tr(
                         "PowerShell 7 nicht gefunden. Bitte den Pfad in Einstellungen angeben.",
-                    )?;
+                    ))?;
                 Ok((
                     program,
                     vec![

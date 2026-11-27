@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 use crate::model::{Node, Shell, Tab, Workspace};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -29,13 +30,13 @@ impl Profile {
             || self.name.chars().count() > 80
             || self.name.chars().any(char::is_control)
         {
-            return Err("Bitte einen Projektnamen mit 1 bis 80 Zeichen eingeben.".into());
+            return Err(tr("Bitte einen Projektnamen mit 1 bis 80 Zeichen eingeben.").into());
         }
         if !crate::model::is_local_absolute_path(&self.directory) || self.tabs.is_empty() {
-            return Err(
-                "Ein Profil benötigt einen absoluten Projektordner und mindestens einen Tab."
-                    .into(),
-            );
+            return Err(tr(
+                "Ein Profil benötigt einen absoluten Projektordner und mindestens einen Tab.",
+            )
+            .into());
         }
         let mut workspace = Workspace {
             tabs: self.tabs.clone(),
@@ -47,7 +48,7 @@ impl Profile {
             .iter()
             .any(|pane| !crate::model::is_local_absolute_path(&pane.directory))
         {
-            return Err("Alle Bereichsordner müssen absolute Pfade sein.".into());
+            return Err(tr("Alle Bereichsordner müssen absolute Pfade sein.").into());
         }
         Ok(())
     }
@@ -61,7 +62,9 @@ impl Profile {
     ) -> Result<(Workspace, u64), String> {
         self.validate()?;
         if !crate::model::is_local_absolute_path(directory) || !directory.is_dir() {
-            return Err("Der Projektordner existiert nicht oder ist kein absoluter Pfad.".into());
+            return Err(
+                tr("Der Projektordner existiert nicht oder ist kein absoluter Pfad.").into(),
+            );
         }
         let mut tabs = self.tabs.clone();
         let mut id = next_id;
@@ -69,14 +72,14 @@ impl Profile {
             match node {
                 Node::Pane(pane) => {
                     pane.id = *id;
-                    *id = id.checked_add(1).ok_or("Bereichs-IDs ausgeschöpft")?;
+                    *id = id.checked_add(1).ok_or(tr("Bereichs-IDs ausgeschöpft"))?;
                     if let Ok(relative) = pane.directory.strip_prefix(old) {
                         pane.directory = new.join(relative);
                     }
                     if !pane.directory.is_dir() {
-                        return Err(format!(
-                            "Bereichsordner fehlt: {}",
-                            pane.directory.display()
+                        return Err(trf!(
+                            "Bereichsordner fehlt: {directory}",
+                            directory = pane.directory.display()
                         ));
                     }
                 }
@@ -119,13 +122,13 @@ impl Default for Library {
 impl Library {
     pub fn validate(&self) -> Result<(), String> {
         if self.version != 1 || self.profiles.len() > 32 {
-            return Err("Unbekannte Profildatei-Version oder mehr als 32 Profile.".into());
+            return Err(tr("Unbekannte Profildatei-Version oder mehr als 32 Profile.").into());
         }
         let mut names = std::collections::HashSet::new();
         for profile in &self.profiles {
             profile.validate()?;
             if !names.insert(profile.name.trim().to_lowercase()) {
-                return Err("Ein Projektprofil mit diesem Namen existiert bereits.".into());
+                return Err(tr("Ein Projektprofil mit diesem Namen existiert bereits.").into());
             }
         }
         Ok(())
@@ -145,7 +148,7 @@ impl Library {
             .read_to_end(&mut bytes)
             .map_err(|e| e.to_string())?;
         if bytes.len() > 2_000_000 {
-            return Err("Profildatei ist zu groß.".into());
+            return Err(tr("Profildatei ist zu groß.").into());
         }
         let library: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         library.validate()?;
@@ -156,7 +159,7 @@ impl Library {
         self.validate()?;
         let bytes = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
         if bytes.len() > 2_000_000 {
-            return Err("Profildatei ist zu groß.".into());
+            return Err(tr("Profildatei ist zu groß.").into());
         }
         crate::model::atomic_write_json(path, &bytes)
     }

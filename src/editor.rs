@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 use eframe::egui::{self, Color32, FontId, Key, Modifiers};
 use std::{
     fs,
@@ -19,25 +20,25 @@ pub struct Document {
 
 fn read_file(path: &Path) -> Result<Vec<u8>, String> {
     if crate::model::is_unc_or_device_path(path) {
-        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
+        return Err(tr("Netzwerk- und Gerätepfade werden nicht unterstützt.").into());
     }
     let file = fs::File::open(path).map_err(|e| e.to_string())?;
     if !file.metadata().map_err(|e| e.to_string())?.is_file() {
-        return Err("Bitte eine normale Textdatei wählen.".into());
+        return Err(tr("Bitte eine normale Textdatei wählen.").into());
     }
     if path
         .canonicalize()
         .map(|c| crate::model::is_unc_or_device_path(&c))
         .unwrap_or(true)
     {
-        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
+        return Err(tr("Netzwerk- und Gerätepfade werden nicht unterstützt.").into());
     }
     let mut bytes = Vec::new();
     file.take((LIMIT + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
     if bytes.len() > LIMIT {
-        return Err("Der Editor unterstützt Dateien bis 256 KiB.".into());
+        return Err(tr("Der Editor unterstützt Dateien bis 256 KiB.").into());
     }
     Ok(bytes)
 }
@@ -47,18 +48,18 @@ impl Document {
         let bytes = read_file(&path)?;
         let bom = bytes.starts_with(&[0xef, 0xbb, 0xbf]);
         let raw = std::str::from_utf8(if bom { &bytes[3..] } else { &bytes })
-            .map_err(|_| "Nur UTF-8 wird unterstützt; die Datei wurde nicht verändert.")?;
+            .map_err(|_| tr("Nur UTF-8 wird unterstützt; die Datei wurde nicht verändert."))?;
         if raw
             .chars()
             .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
         {
-            return Err("Die Datei enthält Binär- oder Steuerzeichen.".into());
+            return Err(tr("Die Datei enthält Binär- oder Steuerzeichen.").into());
         }
         let crlf = raw.contains("\r\n");
         let text = raw.replace("\r\n", "\n");
         if text.contains('\r') || (crlf && raw.matches('\n').count() != raw.matches("\r\n").count())
         {
-            return Err("Gemischte oder reine CR-Zeilenenden werden nicht unterstützt; die Datei bleibt unverändert.".into());
+            return Err(tr("Gemischte oder reine CR-Zeilenenden werden nicht unterstützt; die Datei bleibt unverändert.").into());
         }
         Ok(Self {
             path: Some(path),
@@ -85,7 +86,9 @@ impl Document {
         };
         bytes.extend_from_slice(text.as_bytes());
         if bytes.len() > LIMIT {
-            return Err("Mehr als 256 KiB: Bitte den Text vor dem Speichern verkleinern.".into());
+            return Err(
+                tr("Mehr als 256 KiB: Bitte den Text vor dem Speichern verkleinern.").into(),
+            );
         }
         Ok(bytes)
     }
@@ -103,7 +106,7 @@ impl Document {
             .as_ref()
             .and_then(|p| p.file_name())
             .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "Unbenannt".into());
+            .unwrap_or_else(|| tr("Unbenannt").into());
         format!("{}{}", name, if self.dirty() { " *" } else { "" })
     }
 }
@@ -113,10 +116,10 @@ fn atomic_save(path: &Path, bytes: &[u8], expected: Option<&[u8]>) -> Result<(),
     use std::os::windows::{ffi::OsStrExt, fs::OpenOptionsExt};
     use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, ReplaceFileW};
     if crate::model::is_unc_or_device_path(path) {
-        return Err("Netzwerk- und Gerätepfade werden nicht unterstützt.".into());
+        return Err(tr("Netzwerk- und Gerätepfade werden nicht unterstützt.").into());
     }
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let parent = path.parent().ok_or("Kein Zielordner")?;
+    let parent = path.parent().ok_or(tr("Kein Zielordner"))?;
     let temp = parent.join(format!(
         ".terminalvelocity-{}-{}.tmp",
         std::process::id(),
@@ -138,12 +141,12 @@ fn atomic_save(path: &Path, bytes: &[u8], expected: Option<&[u8]>) -> Result<(),
         let mut guard = None;
         if let Some(expected) = expected {
             let metadata = fs::symlink_metadata(path)
-                .map_err(|e| format!("Datei nicht mehr verfügbar: {e}"))?;
+                .map_err(|e| trf!("Datei nicht mehr verfügbar: {e}", e = e))?;
             if metadata.file_type().is_symlink() || metadata.permissions().readonly() {
-                return Err(
-                    "Schreibgeschützte Dateien und symbolische Links werden nicht überschrieben."
-                        .into(),
-                );
+                return Err(tr(
+                    "Schreibgeschützte Dateien und symbolische Links werden nicht überschrieben.",
+                )
+                .into());
             }
             let mut file = fs::OpenOptions::new()
                 .read(true)
@@ -156,7 +159,7 @@ fn atomic_save(path: &Path, bytes: &[u8], expected: Option<&[u8]>) -> Result<(),
                 .read_to_end(&mut actual)
                 .map_err(|e| e.to_string())?;
             if actual != expected {
-                return Err("Die Datei wurde außerhalb des Editors geändert. Bitte neu öffnen oder unter anderem Namen speichern.".into());
+                return Err(tr("Die Datei wurde außerhalb des Editors geändert. Bitte neu öffnen oder unter anderem Namen speichern.").into());
             }
             guard = Some(file);
         }
@@ -445,16 +448,16 @@ impl Editor {
     pub fn open_selection(&mut self, selection: String, ctx: &egui::Context) -> Result<(), String> {
         let text = selection.replace("\r\n", "\n").replace('\r', "\n");
         if text.trim().is_empty() {
-            return Err("Bitte zuerst Text im Terminal markieren.".into());
+            return Err(tr("Bitte zuerst Text im Terminal markieren.").into());
         }
         if text.len() > LIMIT {
-            return Err("Die Auswahl ist größer als 256 KiB.".into());
+            return Err(tr("Die Auswahl ist größer als 256 KiB.").into());
         }
         if text
             .chars()
             .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
         {
-            return Err("Die Auswahl enthält nicht unterstützte Steuerzeichen.".into());
+            return Err(tr("Die Auswahl enthält nicht unterstützte Steuerzeichen.").into());
         }
         let document = Document {
             path: None,
@@ -539,7 +542,7 @@ impl Editor {
         match result {
             Ok(saved) => {
                 if saved {
-                    self.message = "Gespeichert".into();
+                    self.message = tr("Gespeichert").into();
                 }
                 saved
             }
@@ -554,22 +557,22 @@ impl Editor {
             return;
         }
         let mut choice = 0;
-        egui::Window::new("Ungespeicherte Änderungen")
+        egui::Window::new(tr("Ungespeicherte Änderungen"))
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.label(format!(
-                    "Änderungen an {} speichern?",
-                    self.document.title()
+                ui.label(trf!(
+                    "Änderungen an {document} speichern?",
+                    document = self.document.title()
                 ));
                 ui.horizontal(|ui| {
-                    if ui.button("Speichern und fortfahren").clicked() {
+                    if ui.button(tr("Speichern und fortfahren")).clicked() {
                         choice = 1;
                     }
-                    if ui.button("Verwerfen").clicked() {
+                    if ui.button(tr("Verwerfen")).clicked() {
                         choice = 2;
                     }
-                    if ui.button("Abbrechen").clicked() {
+                    if ui.button(tr("Abbrechen")).clicked() {
                         choice = 3;
                     }
                 });
@@ -605,10 +608,10 @@ impl Editor {
                 }
             }
             ui.horizontal_wrapped(|ui| {
-                if ui.button("Neu").clicked() {
+                if ui.button(tr("Neu")).clicked() {
                     self.request(Pending::Replace(Document::default(), None), &ctx);
                 }
-                if ui.button("Öffnen …").clicked() {
+                if ui.button(tr("Öffnen …")).clicked() {
                     match choose_file(owner, base, false)
                         .and_then(|p| p.map(Document::open).transpose())
                     {
@@ -617,13 +620,13 @@ impl Editor {
                         Err(error) => self.message = error,
                     }
                 }
-                save |= ui.button("Speichern · Strg+S").clicked();
-                save_as |= ui.button("Speichern unter …").clicked();
-                if ui.button("Suchen · Strg+F").clicked() {
+                save |= ui.button(tr("Speichern · Strg+S")).clicked();
+                save_as |= ui.button(tr("Speichern unter …")).clicked();
+                if ui.button(tr("Suchen · Strg+F")).clicked() {
                     self.search = true;
                     self.focus_search = true;
                 }
-                if ui.button("Editor schließen").clicked() {
+                if ui.button(tr("Editor schließen")).clicked() {
                     self.request(Pending::Close, &ctx);
                 }
             });
@@ -635,7 +638,7 @@ impl Editor {
                     .path
                     .as_ref()
                     .map(|p| p.display().to_string())
-                    .unwrap_or_else(|| format!("Neue Datei · Startordner: {}", base.display())),
+                    .unwrap_or_else(|| trf!("Neue Datei · Startordner: {directory}", directory = base.display())),
             );
             let mut jump_forward = false;
             let mut jump_backward = false;
@@ -647,7 +650,7 @@ impl Editor {
                     ui.horizontal(|ui| {
                         let response = ui.add(
                             egui::TextEdit::singleline(&mut self.query)
-                                .hint_text("Wörtliche Suche, Groß-/Kleinschreibung")
+                                .hint_text(tr("Wörtliche Suche, Groß-/Kleinschreibung"))
                                 .char_limit(256),
                         );
                         if self.focus_search {
@@ -662,16 +665,16 @@ impl Editor {
                         let enter_plain = response.lost_focus()
                             && ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
                         jump_backward = ui
-                            .button("Zurück")
+                            .button(tr("Zurück"))
                             .on_hover_text("Umschalt+Enter")
                             .clicked()
                             || enter_shift;
                         jump_forward = ui
-                            .button("Nächster Treffer")
+                            .button(tr("Nächster Treffer"))
                             .on_hover_text("Enter")
                             .clicked()
                             || enter_plain;
-                        if ui.button("Schließen").on_hover_text("Esc").clicked() {
+                        if ui.button(tr("Schließen")).on_hover_text("Esc").clicked() {
                             self.search = false;
                         }
                     });
@@ -681,7 +684,7 @@ impl Editor {
                 let total_lines = self.document.text.bytes().filter(|b| *b == b'\n').count() + 1;
                 let target = line.clamp(1, total_lines);
                 if line > 1 {
-                    self.message = format!("Zeile {target} / {total_lines}");
+                    self.message = trf!("Zeile {target} / {total_lines}", target = target, total_lines = total_lines);
                 }
                 Some(line_char_range(&self.document.text, target))
             } else if (jump_forward || jump_backward) && !self.query.is_empty() {
@@ -692,7 +695,7 @@ impl Editor {
                     .map(|(start, matched)| start..start + matched.len())
                     .collect();
                 if matches.is_empty() {
-                    self.message = "Keine Treffer".into();
+                    self.message = tr("Keine Treffer").into();
                     None
                 } else {
                     let len = matches.len();
@@ -702,7 +705,7 @@ impl Editor {
                         self.next_match % len
                     };
                     self.next_match = (index + 1) % len;
-                    self.message = format!("Treffer {} / {}", index + 1, len);
+                    self.message = trf!("Treffer {current} / {total}", current = index + 1, total = len);
                     let found = matches[index].clone();
                     Some(
                         self.document.text[..found.start].chars().count()
@@ -712,11 +715,11 @@ impl Editor {
             } else {
                 None
             };
-            ui.small(format!(
-                "UTF-8{} · {} · Tab: Einrückung · Strg+Z: Undo · Strg+Umschalt+Z: Redo · {}",
-                if self.document.bom { " mit BOM" } else { "" },
-                if self.document.crlf { "CRLF" } else { "LF" },
-                self.document.title()
+            ui.small(trf!(
+                "UTF-8{bom} · {eol} · Tab: Einrückung · Strg+Z: Undo · Strg+Umschalt+Z: Redo · {document}",
+                bom = if self.document.bom { tr(" mit BOM") } else { "" },
+                eol = if self.document.crlf { "CRLF" } else { "LF" },
+                document = self.document.title()
             ));
             if !self.message.is_empty() {
                 ui.label(&self.message);
@@ -839,7 +842,7 @@ fn choose_file(
             if error == 0 {
                 Ok(None)
             } else {
-                Err(format!("Dateidialog fehlgeschlagen: {error}"))
+                Err(trf!("Dateidialog fehlgeschlagen: {error}", error = error))
             }
         }
     }
