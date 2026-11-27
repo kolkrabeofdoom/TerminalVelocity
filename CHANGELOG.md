@@ -1,6 +1,6 @@
 # Änderungen
 
-## Unveröffentlicht
+## 1.1.1 – „Kiene Kästkes“ – 27. November 2026
 
 - **Ersatzschriften für fehlende Zeichen**: Symbole, die KI-CLIs ständig ausgeben (✓ ✗ ⎿ ✻ …), sowie chinesische, japanische und koreanische Schrift erschienen bisher als Kästchen. Jetzt springen Segoe UI Symbol, Segoe UI Emoji, Microsoft YaHei und Malgun Gothic aus `%SystemRoot%\Fonts` ein, sofern vorhanden.
 
