@@ -1,4 +1,4 @@
-//! Saving workspace.json, guarded while an unloadable file is protected.
+//! Loading and saving workspace.json; an unloadable file is backed up and protected.
 
 use crate::*;
 
@@ -35,5 +35,49 @@ impl TerminalApp {
             Err(e) => format!("Speichern fehlgeschlagen: {e}"),
         };
         saved
+    }
+}
+
+/// Load `workspace.json`. Returns the workspace, the first status line and, if the
+/// file exists but cannot be used, a guard that protects it from being overwritten.
+pub(crate) fn load_workspace(
+    storage: &std::path::Path,
+) -> (Workspace, String, Option<model::WorkspaceGuard>) {
+    match std::fs::metadata(storage) {
+        Ok(_) => match Workspace::load(storage) {
+            Ok(state) => (state, "Arbeitsbereich wiederhergestellt".to_string(), None),
+            Err(error) => {
+                // Never let the defaults silently replace the user's file on exit.
+                let backup = model::backup_unloadable(storage);
+                let status = match &backup {
+                    Ok(path) => format!(
+                        "Workspace nicht geladen: {error}. Kopie gesichert unter {}; automatisches Speichern ist ausgesetzt.",
+                        path.display()
+                    ),
+                    Err(backup_error) => format!(
+                        "Workspace nicht geladen: {error}. Sicherung fehlgeschlagen ({backup_error}); Speichern ist gesperrt."
+                    ),
+                };
+                (
+                    Workspace::default(),
+                    status,
+                    Some(model::WorkspaceGuard {
+                        reason: error,
+                        backup: backup.ok(),
+                    }),
+                )
+            }
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            (Workspace::default(), "Bereit".into(), None)
+        }
+        Err(error) => (
+            Workspace::default(),
+            format!("Lesefehler: {error}; Speichern ist gesperrt."),
+            Some(model::WorkspaceGuard {
+                reason: error.to_string(),
+                backup: None,
+            }),
+        ),
     }
 }
