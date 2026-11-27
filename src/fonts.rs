@@ -3,6 +3,7 @@
 //! AI CLIs print many of these; without a fallback they show up as boxes.
 
 use crate::model;
+use eframe::egui;
 
 /// A font file under `%SystemRoot%\Fonts`. `index` selects the face in a `.ttc` collection.
 struct SystemFont {
