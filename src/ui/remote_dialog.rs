@@ -1,7 +1,9 @@
-use super::*;
+//! Remote connection dialog (SSH and WinRM).
+
+use crate::*;
 
 impl TerminalApp {
-    pub(super) fn open_remote(
+    pub(crate) fn open_remote(
         &mut self,
         connection: remote::Connection,
         placement: usize,
@@ -59,7 +61,7 @@ impl TerminalApp {
         Ok(())
     }
 
-    pub(super) fn remote_window(&mut self, ctx: &egui::Context) {
+    pub(crate) fn remote_window(&mut self, ctx: &egui::Context) {
         let Some(mut dialog) = self.remote_dialog.take() else {
             return;
         };
