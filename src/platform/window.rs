@@ -1,7 +1,5 @@
 //! Native window opacity via the Windows API.
 
-use crate::*;
-
 pub(crate) fn set_window_opacity(
     window: &impl raw_window_handle::HasWindowHandle,
     alpha: Option<u8>,

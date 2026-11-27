@@ -71,7 +71,8 @@ impl TerminalApp {
             return;
         }
         if self.about_banner.is_none() {
-            if let Ok(decoded) = image::load_from_memory(include_bytes!("../assets/banner.jpg")) {
+            if let Ok(decoded) = image::load_from_memory(include_bytes!("../../assets/banner.jpg"))
+            {
                 let rgba = decoded.to_rgba8();
                 let color_image = egui::ColorImage::from_rgba_unmultiplied(
                     [rgba.width() as usize, rgba.height() as usize],
@@ -132,7 +133,7 @@ impl TerminalApp {
                     .max_height(340.0)
                     .show(ui, |ui| {
                         ui.label(
-                            egui::RichText::new(include_str!("../RELEASE_NOTES.md"))
+                            egui::RichText::new(include_str!("../../RELEASE_NOTES.md"))
                                 .size(13.0),
                         );
                     });
