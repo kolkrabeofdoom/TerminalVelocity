@@ -131,3 +131,14 @@ Neu geprüft:
 - Gegenprobe Vendor-Prüfung: Eine undokumentierte Zeile in `vendor/vte-0.15.0/src/lib.rs` ließ die CI fehlschlagen.
 
 Nicht geprüft: Darstellung der plattdeutschen Oberfläche im sichtbaren Fenster, grafische Klickpfade, Windows-Versionen außer Windows Server 2022.
+
+## 1.1.1 „Kiene Kästkes“ – 27. November 2026
+
+Geprüft über GitHub Actions mit `scripts/ci.ps1` wie für 1.1.0; 130 Tests, davon 60 im Hauptprogramm.
+
+Neu geprüft:
+
+- Schriftreihenfolge: Consolas zuerst, danach die eingebauten egui-Schriften, dann die Windows-Ersatzschriften; fehlende Dateien werden übersprungen.
+- Mit den echten Schriften des Windows-Servers: Die eingebauten Schriften haben keine Glyphe für ✓, ✗, ⎿, ✻, 中, あ und 한; mit den Ersatzschriften ist sie vorhanden.
+
+Nicht geprüft: Darstellung im sichtbaren Fenster, Speicherverbrauch auf Endgeräten.
