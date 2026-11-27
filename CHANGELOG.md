@@ -6,7 +6,7 @@
 - Abhängigkeiten: `url` 2.5.9 (RUSTSEC-2026-0592), `clipboard-win` 5.4.3 (5.4.1 zurückgezogen).
 - **Consolas auch ohne `C:`**: Die Terminalschrift wird aus `%SystemRoot%\Fonts` geladen statt fest aus `C:\Windows\Fonts`. Liegt Windows auf einem anderen Laufwerk, fiel TerminalVelocity bisher still auf die eingebaute Schrift zurück.
 - **Kein Hängen bei getrennten Netzlaufwerken**: Meldet eine Shell einen Ordner auf einem eingehängten Netzlaufwerk, prüft TerminalVelocity dessen Existenz nicht mehr im Fenster-Thread; geprüft wird beim Start einer Sitzung dort. Meldungen ohne Ordnerwechsel greifen gar nicht mehr aufs Dateisystem zu.
-- Intern: Testmodi nur noch mit Feature `test-tools`, `main.rs` in Module zerlegt, `clippy` in der CI.
+- Intern: Testmodi nur noch mit Feature `test-tools`, `main.rs` in Module zerlegt, `clippy` in der CI. Vendor-Code wird gegen die crates.io-Originale plus dokumentierte Patches geprüft (`scripts/vendor-check.ps1`); `cargo deny` prüft Abhängigkeiten wöchentlich auf Sicherheitsmeldungen und Lizenzen.
 
 ## 1.0.1 – „SecureAllConnections-Fix“ – 26. November 2026
 

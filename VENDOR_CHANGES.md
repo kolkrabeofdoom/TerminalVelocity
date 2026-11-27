@@ -1,4 +1,25 @@
-# Lokale Anpassungen an egui_term 0.1.0
+# Vendor-Code: Herkunft, Prüfung, Änderungen
+
+Drei Crates liegen angepasst unter `vendor/`: `alacritty_terminal 0.25.1`, `vte 0.15.0` und `egui_term 0.1.0`. Jeder Fork ist genau **Original von crates.io + Patch** unter `vendor/patches/`; `vendor/patches/sources.json` nennt Version, SHA256 (Prüfsumme aus dem crates.io-Index) und die beim Vendoring weggelassenen Paketdateien. `scripts/vendor-check.ps1` prüft das in jeder CI. Eine Änderung am Vendor-Code ohne passenden Patch lässt die CI fehlschlagen.
+
+Sicherheitsmeldungen zu allen Abhängigkeiten prüft `.github/workflows/audit.yml` (`cargo deny`, Konfiguration in `deny.toml`) wöchentlich, auf Knopfdruck und bei jedem PR, der `Cargo.lock`, `Cargo.toml` oder `vendor/` ändert.
+
+## Vendor-Code ändern
+
+1. Änderung unter `vendor/<crate>/` vornehmen und committen.
+2. `./scripts/vendor-check.ps1 -Update` erzeugt den Patch neu (aus dem eingecheckten Stand, also nach dem Commit ausführen) und aktualisiert `sources.json`.
+3. Die Änderung unten in diesem Dokument beschreiben, Patch und Beschreibung committen.
+
+## Upstream-Version übernehmen
+
+1. Neue Version und deren SHA256 aus dem crates.io-Index in `vendor/patches/sources.json` eintragen (Feld `cksum` unter `https://index.crates.io/…`), Verzeichnis unter `vendor/` umbenennen, `[patch.crates-io]` in `Cargo.toml` anpassen.
+2. Neues Original entpacken, die bisherigen Patches darauf anwenden (`git apply -p2 --3way` bzw. von Hand), Konflikte lösen, Ergebnis nach `vendor/<crate>-<neu>/` legen.
+3. `cargo update -p <crate>`, Tests, dann committen und `./scripts/vendor-check.ps1 -Update` ausführen.
+4. Den Wechsel in diesem Dokument mit Datum und Grund festhalten.
+
+## Änderungsprotokoll
+
+### Lokale Anpassungen an egui_term 0.1.0
 
 Quelle: https://crates.io/crates/egui_term/0.1.0, Repository: https://github.com/Harzu/egui_term
 
@@ -16,7 +37,7 @@ Die ursprüngliche MIT-Lizenz liegt unverändert unter `vendor/egui_term-0.1.0/L
 
 
 
-## 0.4.0: Optionale Darstellungseffekte
+### 0.4.0: Optionale Darstellungseffekte
 
 - Neue VisualEffects-Konfiguration mit Aurora-Mesh, Phosphor-Scanlines und Sternpartikeln.
 - Cursor-Schweif und Konturleuchten vor dem Zeichnen der Terminalzellen; auf den Bereich begrenzt, mit Ablaufzeit und Rücksetzen bei Fokus-/Layout-/Scrolländerungen.
@@ -24,39 +45,39 @@ Die ursprüngliche MIT-Lizenz liegt unverändert unter `vendor/egui_term-0.1.0/L
 - Tests für Trail-Grenzen und Lebenszyklus. Keine Änderung an PTY-Protokoll oder Eingabeformat.
 
 
-## 0.5.0: Hintergrundtexturen
+### 0.5.0: Hintergrundtexturen
 
 BackgroundImage und TerminalView::set_background_image zeichnen eine geteilte GPU-Textur vor Effekten und Terminalzellen. Seitenverhältnis bleibt bei mittigem Zuschnitt oder Einpassen erhalten; Abdunklung und Clipping gelten je Terminalbereich. Der Decoder und asynchrone Ladecache liegen im Hauptprogramm.
 
-## 0.6.0: Text-Nachleuchten
+### 0.6.0: Text-Nachleuchten
 
 TextAfterglow speichert maximal 8192 aktuelle Glyphen und 512 Leuchtzeitpunkte. Neue/geänderte sichtbare Glyphen erhalten vier versetzte, quadratisch abklingende Lichtkonturen vor den Terminalzellen. Gelöschte Glyphen werden sofort verworfen. Fokus, Animationseinstellungen, Auswahl/Suchtreffer und Ansichtsänderungen begrenzen den Effekt. Die Tests der unveränderten Renderer-Quelldatei laufen jetzt über tests/renderer.rs in der Haupt-Suite.
 
-## 0.8.0: Sixel und portable ConPTY
+### 0.8.0: Sixel und portable ConPTY
 
 - `vendor/vte-0.15.0`: unveränderte Upstream-Version als Basis, ergänzt um DCS-Sixel-Callbacks, Unterscheidung vollständiger Terminierung/Abbruch, XTSMGRAPHICS und Zellgrößenabfrage. Die neue Perform-Methode delegiert standardmäßig an `unhook`, sodass bestehende Implementierungen kompatibel bleiben. MIT/Apache-2.0-Lizenzen liegen im Verzeichnis.
 - `vendor/alacritty_terminal-0.25.1`: begrenzter Sixel-Decoder und zeilenbasierter Bildspeicher; Anbindung an Scrollen, Löschen, Textausgabe, Bildschirmwechsel und Reset. Grafikfähigkeitsantworten, DEC-Modi 80/1070 und Bild-Zellgeometrie. ConPTY wird über den absoluten Pfad neben der EXE geladen. Ursprüngliche Apache-2.0-Lizenz und Referenztests bleiben erhalten.
 - `vendor/egui_term-0.1.0`: sichtbare Sixel-Bildsegmente werden als beschnittene Texturen zwischen Hintergrund und Text gezeichnet; Texturen außerhalb der Ansicht werden freigegeben. PTY-Antworten und Größenanfragen werden an den Kindprozess gesendet.
 - Die Rust-Versionen sind per `[patch.crates-io]` und `Cargo.lock` festgeschrieben. Portable Microsoft-Laufzeit: MIT-Lizenz unter `shells/conpty-LICENSE.txt`, Herkunft/Prüfsumme unter `shells/conpty-source.json`.
 
-## 0.9.0: Direkte lokale Bildanzeige
+### 0.9.0: Direkte lokale Bildanzeige
 
 `Term::display_rgba` validiert RGBA-Abmessungen und Pufferlänge und nutzt dieselbe Platzierung, Bild-ID-Vergabe und Speicherbegrenzung wie der Sixel-Decoder. Ein lokales Bild beginnt am Zeilenanfang, nach einer gegebenenfalls begonnenen Textzeile; Sixel-Modi bleiben erhalten. egui_term stellt die verfügbare Pixelbreite und die lokale Einfügefunktion bereit. Dateiauswahl, Ablagezuordnung, asynchrones Decodieren und Skalierung liegen im Hauptprogramm. Keine zusätzlichen Abhängigkeiten.
 
-## 0.9.1: Text unter dem Kontextmenü
+### 0.9.1: Text unter dem Kontextmenü
 
 egui_term stellt die logische Textzeile unter einer Pixelposition samt UTF-8-Byteoffset bereit. Die Zuordnung berücksichtigt Scrollback, weiche Zeilenumbrüche und breite Zeichen. Pfaderkennung und das Festhalten des angeklickten Ziels liegen im Hauptprogramm.
 
-## 0.9.3: Sicherheitshärtung
+### 0.9.3: Sicherheitshärtung
 
 - `vendor/egui_term-0.1.0`: `url_regex` und `open_link` sind über `is_safe_http_url` auf wohlgeformte `http://`- und `https://`-Links beschränkt; `file://`- und Fremdprotokoll-Schemata sowie der Panic bei fehlgeschlagenem `open::that`-Aufruf wurden entfernt. `encode_paste` respektiert `TermMode::BRACKETED_PASTE` (`\x1b[200~` … `\x1b[201~`) und entfernt `ESC`-/`CSI`-/`NUL`-Steuerbytes im eingefügten Text (Pastejacking-Schutz). `TerminalBackend::new` weist Programmpfade mit inneren Anführungszeichen oder Steuerzeichen ab. Explizite `f32`-Literale in `src/effects.rs` beseitigen zukünftige Compilerwarnungen.
 - `vendor/alacritty_terminal-0.25.1`: `conpty.rs` gibt Fehler bei `CreatePseudoConsole` als `io::Error` zurück und protokolliert `ResizePseudoConsole`-Fehler über `warn!`, statt per `assert_eq!` abzubrechen.
 
-## 1.0.1: Umgebungsvariablen für Sitzungen
+### 1.0.1: Umgebungsvariablen für Sitzungen
 
 - `vendor/egui_term-0.1.0`: `BackendSettings` hat ein Feld `env`, das unverändert an `alacritty_terminal::tty::Options::env` (ConPTY-Umgebungsblock) weitergereicht wird. TerminalVelocity übergibt darüber den Sitzungsschlüssel für die Ordnermeldung an Git Bash. Kein Einfluss auf PTY-Protokoll oder Eingabeformat.
 
-## Unveröffentlicht: Strg+U und Bestandsaufnahme
+### Unveröffentlicht: Strg+U und Bestandsaufnahme
 
 - `vendor/egui_term-0.1.0`: `src/bindings.rs` sendet für Strg+U und Strg+Umschalt+U das Steuerzeichen `0x15` (NAK, „Zeile löschen“ in Readline-Shells) statt `0x51` (`Q`). Übernommen aus Upstream [Harzu/egui_term#43](https://github.com/Harzu/egui_term/pull/43). Neuer Test prüft alle Strg+Buchstabe-Kombinationen; die `egui_term`-Tests laufen jetzt in `scripts/ci.ps1` mit.
 - `vendor/alacritty_terminal-0.25.1/tests/ref/*/alacritty.recording`: Acht Referenzaufzeichnungen haben beim Import ihre CRLF-Zeilenenden verloren. Reine Testdaten, nicht im Paket und nicht in der CI ausgeführt; inhaltlich sonst unverändert.

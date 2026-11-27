@@ -347,7 +347,7 @@ Für einen vollständigen Programmordner einschließlich der Hilfsskripte ist `b
 ./scripts/ci.ps1
 ```
 
-Der Ablauf prüft Formatierung, `clippy` ohne Warnungen (`-D warnings`), die Haupttests einschließlich ausdrücklich aktivierter Offline-Integrationstests, die vte-Parser-Tests, den Release-Build und vier reale Windows-PTY-Prüfungen: Ordnerübernahme, Sitzungsneustart, Projektprofile und Verlaufssuche. PowerShell 7 und OpenSSH müssen lokal verfügbar sein. Die Tests stellen keine Remote-Verbindung her und senden keine KI-Anfragen; notwendige Downloads beim Vorbereiten des Builds benötigen Internet.
+Der Ablauf prüft Formatierung, `clippy` ohne Warnungen (`-D warnings`), ob der Vendor-Code exakt den crates.io-Originalen plus den Patches unter `vendor/patches/` entspricht, die Haupttests einschließlich ausdrücklich aktivierter Offline-Integrationstests, die vte-Parser-Tests, den Release-Build und vier reale Windows-PTY-Prüfungen: Ordnerübernahme, Sitzungsneustart, Projektprofile und Verlaufssuche. PowerShell 7 und OpenSSH müssen lokal verfügbar sein. Die Tests stellen keine Remote-Verbindung her und senden keine KI-Anfragen; notwendige Downloads beim Vorbereiten des Builds benötigen Internet.
 
 Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die Suite umfasst derzeit **121 Tests** plus die vier PTY-Prüfungen; deren Berichte erscheinen im CI-Log.
 

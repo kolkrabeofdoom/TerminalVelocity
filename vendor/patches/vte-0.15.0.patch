@@ -1,0 +1,153 @@
+diff --git a/orig/src/ansi.rs b/vend/src/ansi.rs
+index 592266e..a5c1c5f 100644
+--- a/orig/src/ansi.rs
++++ b/vend/src/ansi.rs
+@@ -244,6 +244,8 @@ fn parse_number(input: &[u8]) -> Option<u8> {
+ struct ProcessorState<T: Timeout> {
+     /// Last processed character for repetition.
+     preceding_char: Option<char>,
++    sixel_active: bool,
++    sixel_escape: bool,
+ 
+     /// State for synchronized terminal updates.
+     sync_state: SyncState<T>,
+@@ -493,6 +495,12 @@ pub trait Timeout: Default {
+ /// XXX Should probably not provide default impls for everything, but it makes
+ /// writing specific handler impls for tests far easier.
+ pub trait Handler {
++    fn sixel_start(&mut self, _aspect: u16, _background: u16) {}
++    fn sixel_put(&mut self, _byte: u8) {}
++    fn sixel_end(&mut self, _complete: bool) {}
++    fn sixel_query(&mut self, _item: u16, _action: u16) {}
++    fn cell_size_pixels(&mut self) {}
++
+     /// OSC to set window title.
+     fn set_title(&mut self, _: Option<String>) {}
+ 
+@@ -1288,12 +1296,14 @@ where
+ {
+     #[inline]
+     fn print(&mut self, c: char) {
++        if self.state.sixel_escape { self.handler.sixel_end(false); self.state.sixel_escape = false; }
+         self.handler.input(c);
+         self.state.preceding_char = Some(c);
+     }
+ 
+     #[inline]
+     fn execute(&mut self, byte: u8) {
++        if self.state.sixel_escape { self.handler.sixel_end(false); self.state.sixel_escape = false; }
+         match byte {
+             C0::HT => self.handler.put_tab(1),
+             C0::BS => self.handler.backspace(),
+@@ -1309,24 +1319,30 @@ where
+ 
+     #[inline]
+     fn hook(&mut self, params: &Params, intermediates: &[u8], ignore: bool, action: char) {
+-        debug!(
+-            "[unhandled hook] params={:?}, ints: {:?}, ignore: {:?}, action: {:?}",
+-            params, intermediates, ignore, action
+-        );
++        if self.state.sixel_escape { self.handler.sixel_end(false); self.state.sixel_escape = false; }
++        self.state.sixel_active = !ignore && intermediates.is_empty() && action == 'q';
++        if self.state.sixel_active {
++            let mut p = params.iter();
++            let aspect = p.next().map(|p| p[0]).unwrap_or(0);
++            let background = p.next().map(|p| p[0]).unwrap_or(0);
++            self.handler.sixel_start(aspect, background);
++        }
+     }
+ 
+-    #[inline]
+     fn put(&mut self, byte: u8) {
+-        debug!("[unhandled put] byte={:?}", byte);
++        if self.state.sixel_active { self.handler.sixel_put(byte); }
+     }
+ 
+-    #[inline]
+-    fn unhook(&mut self) {
+-        debug!("[unhandled unhook]");
++    fn unhook_with_terminator(&mut self, byte: u8) {
++        if self.state.sixel_active {
++            self.state.sixel_active = false;
++            if byte == 0x1b { self.state.sixel_escape = true; }
++            else { self.handler.sixel_end(byte == 0x9c); }
++        }
+     }
+-
+     #[inline]
+     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
++        if self.state.sixel_escape { self.handler.sixel_end(false); self.state.sixel_escape = false; }
+         let terminator = if bell_terminated { "\x07" } else { "\x1b\\" };
+ 
+         fn unhandled(params: &[&[u8]]) {
+@@ -1533,6 +1549,7 @@ where
+         has_ignored_intermediates: bool,
+         action: char,
+     ) {
++        if self.state.sixel_escape { self.handler.sixel_end(false); self.state.sixel_escape = false; }
+         macro_rules! unhandled {
+             () => {{
+                 debug!(
+@@ -1556,6 +1573,7 @@ where
+         };
+ 
+         match (action, intermediates) {
++            ('S', [b'?']) => handler.sixel_query(next_param_or(0), next_param_or(0)),
+             ('@', []) => handler.insert_blank(next_param_or(1) as usize),
+             ('A', []) => handler.move_up(next_param_or(1) as usize),
+             ('B', []) | ('e', []) => handler.move_down(next_param_or(1) as usize),
+@@ -1738,6 +1756,7 @@ where
+             ('T', []) => handler.scroll_down(next_param_or(1) as usize),
+             ('t', []) => match next_param_or(1) as usize {
+                 14 => handler.text_area_size_pixels(),
++                16 => handler.cell_size_pixels(),
+                 18 => handler.text_area_size_chars(),
+                 22 => handler.push_title(),
+                 23 => handler.pop_title(),
+@@ -1771,6 +1790,10 @@ where
+ 
+     #[inline]
+     fn esc_dispatch(&mut self, intermediates: &[u8], _ignore: bool, byte: u8) {
++        if self.state.sixel_escape {
++            self.state.sixel_escape = false;
++            self.handler.sixel_end(byte == 0x5c && intermediates.is_empty());
++        }
+         macro_rules! unhandled {
+             () => {{
+                 debug!(
+diff --git a/orig/src/lib.rs b/vend/src/lib.rs
+index 1c69123..e042988 100644
+--- a/orig/src/lib.rs
++++ b/vend/src/lib.rs
+@@ -318,18 +318,18 @@ impl<const OSC_RAW_BUF_SIZE: usize> Parser<OSC_RAW_BUF_SIZE> {
+         match byte {
+             0x00..=0x17 | 0x19 | 0x1C..=0x7E => performer.put(byte),
+             0x18 | 0x1A => {
+-                performer.unhook();
++                performer.unhook_with_terminator(byte);
+                 performer.execute(byte);
+                 self.state = State::Ground
+             },
+             0x1B => {
+-                performer.unhook();
++                performer.unhook_with_terminator(byte);
+                 self.reset_params();
+                 self.state = State::Escape
+             },
+             0x7F => (),
+             0x9C => {
+-                performer.unhook();
++                performer.unhook_with_terminator(byte);
+                 self.state = State::Ground
+             },
+             _ => (),
+@@ -788,6 +788,9 @@ pub trait Perform {
+     /// terminated.
+     fn unhook(&mut self) {}
+ 
++    /// TerminalVelocity: distinguish cancellation from ST/ESC termination.
++    fn unhook_with_terminator(&mut self, _byte: u8) { self.unhook(); }
++
+     /// Dispatch an operating system command.
+     fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {}
+ 

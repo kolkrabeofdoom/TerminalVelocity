@@ -20,6 +20,16 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Parser regression tests failed' }
     & cargo test --locked -p egui_term --lib
     if ($LASTEXITCODE -ne 0) { throw 'egui_term tests failed' }
+    # Vendored crates = crates.io original + documented patch, nothing else.
+    & (Join-Path $PSScriptRoot 'vendor-check.ps1')
+    # Round trip for -Update: regenerated patches must reproduce the vendor tree too.
+    $regenerated = Join-Path ([IO.Path]::GetTempPath()) ('tv-vendor-patches-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        & (Join-Path $PSScriptRoot 'vendor-check.ps1') -Update -PatchDirectory $regenerated
+        & (Join-Path $PSScriptRoot 'vendor-check.ps1') -PatchDirectory $regenerated
+    } finally {
+        Remove-Item -LiteralPath $regenerated -Recurse -Force -ErrorAction SilentlyContinue
+    }
     # PTY test modes exist only with the test-tools feature.
     & (Join-Path $PSScriptRoot 'build.ps1') -SkipTests -Features test-tools
 
