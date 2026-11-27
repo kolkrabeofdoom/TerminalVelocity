@@ -223,7 +223,7 @@ fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
         R,            Modifiers::CTRL; BindingAction::Char('\x12');
         S,            Modifiers::CTRL; BindingAction::Char('\x13');
         T,            Modifiers::CTRL; BindingAction::Char('\x14');
-        U,            Modifiers::CTRL; BindingAction::Char('\x51');
+        U,            Modifiers::CTRL; BindingAction::Char('\x15');
         V,            Modifiers::CTRL; BindingAction::Char('\x16');
         W,            Modifiers::CTRL; BindingAction::Char('\x17');
         X,            Modifiers::CTRL; BindingAction::Char('\x18');
@@ -291,7 +291,7 @@ fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
         R,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x12');
         S,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x13');
         T,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x14');
-        U,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x51');
+        U,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x15');
         V,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x16');
         W,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x17');
         X,        Modifiers::SHIFT | Modifiers::CTRL; BindingAction::Char('\x18');
@@ -350,6 +350,32 @@ mod tests {
     use crate::bindings::MouseBinding;
     use crate::TerminalMode;
     use egui::{Key, Modifiers, PointerButton};
+
+    /// TerminalVelocity: Ctrl+<letter> must send the matching C0 control code
+    /// (Ctrl+U was 0x51 'Q' instead of 0x15 NAK, upstream fix #43).
+    #[test]
+    fn ctrl_letters_send_matching_control_codes() {
+        let layout = BindingsLayout::default();
+        let keys = [
+            Key::A, Key::B, Key::C, Key::D, Key::E, Key::F, Key::G, Key::H, Key::I,
+            Key::J, Key::K, Key::L, Key::M, Key::N, Key::O, Key::P, Key::Q, Key::R,
+            Key::S, Key::T, Key::U, Key::V, Key::W, Key::X, Key::Y, Key::Z,
+        ];
+        for (index, key) in keys.into_iter().enumerate() {
+            let expected = char::from(index as u8 + 1);
+            for modifiers in [Modifiers::CTRL, Modifiers::CTRL | Modifiers::SHIFT] {
+                let action =
+                    layout.get_action(InputKind::KeyCode(key), modifiers, TerminalMode::empty());
+                if let BindingAction::Char(sent) = action {
+                    assert_eq!(sent, expected, "{key:?} with {modifiers:?}");
+                }
+            }
+        }
+        assert_eq!(
+            layout.get_action(InputKind::KeyCode(Key::U), Modifiers::CTRL, TerminalMode::empty()),
+            BindingAction::Char('\x15')
+        );
+    }
 
     #[test]
     fn add_new_custom_keyboard_binding() {

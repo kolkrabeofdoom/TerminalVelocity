@@ -55,3 +55,8 @@ egui_term stellt die logische Textzeile unter einer Pixelposition samt UTF-8-Byt
 ## 1.0.1: Umgebungsvariablen für Sitzungen
 
 - `vendor/egui_term-0.1.0`: `BackendSettings` hat ein Feld `env`, das unverändert an `alacritty_terminal::tty::Options::env` (ConPTY-Umgebungsblock) weitergereicht wird. TerminalVelocity übergibt darüber den Sitzungsschlüssel für die Ordnermeldung an Git Bash. Kein Einfluss auf PTY-Protokoll oder Eingabeformat.
+
+## Unveröffentlicht: Strg+U und Bestandsaufnahme
+
+- `vendor/egui_term-0.1.0`: `src/bindings.rs` sendet für Strg+U und Strg+Umschalt+U das Steuerzeichen `0x15` (NAK, „Zeile löschen“ in Readline-Shells) statt `0x51` (`Q`). Übernommen aus Upstream [Harzu/egui_term#43](https://github.com/Harzu/egui_term/pull/43). Neuer Test prüft alle Strg+Buchstabe-Kombinationen; die `egui_term`-Tests laufen jetzt in `scripts/ci.ps1` mit.
+- `vendor/alacritty_terminal-0.25.1/tests/ref/*/alacritty.recording`: Acht Referenzaufzeichnungen haben beim Import ihre CRLF-Zeilenenden verloren. Reine Testdaten, nicht im Paket und nicht in der CI ausgeführt; inhaltlich sonst unverändert.
