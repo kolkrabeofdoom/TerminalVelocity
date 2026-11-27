@@ -64,7 +64,8 @@ jobs:
       - name: Build portable package
         id: package
         run: |
-          $zip = ./scripts/package.ps1 -SkipBuild | Select-Object -Last 1
+          # Rebuild without the test-tools feature; the CI build above contains test modes.
+          $zip = ./scripts/package.ps1 -SkipTests | Select-Object -Last 1
           if (-not (Test-Path -LiteralPath $zip) -or -not (Test-Path -LiteralPath "$zip.sha256")) { throw 'Package missing' }
           $expected = "TerminalVelocity-${{ steps.meta.outputs.version }}-Windows-x64.zip"
           if ((Split-Path -Leaf $zip) -ne $expected) { throw "Unexpected package name: $zip" }

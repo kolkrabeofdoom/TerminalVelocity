@@ -1,4 +1,4 @@
-param([switch]$SkipBuild, [string]$OutputDirectory)
+param([switch]$SkipBuild, [switch]$SkipTests, [string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $projectRoot 'dist' }
@@ -9,10 +9,18 @@ if (-not $version) { throw 'Package version missing' }
 $packageRoot = Join-Path $OutputDirectory 'TerminalVelocity'
 $zip = Join-Path $OutputDirectory "TerminalVelocity-$version-Windows-x64.zip"
 if ((Test-Path -LiteralPath $packageRoot) -or (Test-Path -LiteralPath $zip)) { throw 'Output already exists. Choose a fresh -OutputDirectory.' }
-if (-not $SkipBuild) { & (Join-Path $PSScriptRoot 'build.ps1') }
+if (-not $SkipBuild) { & (Join-Path $PSScriptRoot 'build.ps1') -SkipTests:$SkipTests }
 $targetRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $projectRoot 'target' }
 $executable = Join-Path $targetRoot 'release/TerminalVelocity.exe'
 if (-not (Test-Path -LiteralPath $executable)) { throw "Release executable missing: $executable" }
+# A release EXE must reject test modes (exit code 2); a test-tools build would run them.
+$probe = Start-Process -FilePath $executable -ArgumentList '--directory-test' -WindowStyle Hidden -PassThru
+if (-not $probe.WaitForExit(30000)) {
+    Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
+    throw 'Release executable contains test modes (probe timed out)'
+}
+$probe.Refresh()
+if ($probe.ExitCode -ne 2) { throw "Release executable contains test modes (exit code $($probe.ExitCode), expected 2)" }
 $source = Get-Content -LiteralPath (Join-Path $projectRoot 'shells/powershell-source.json') -Raw | ConvertFrom-Json
 $cacheRoot = Join-Path $projectRoot 'work/downloads'
 New-Item -ItemType Directory -Path $cacheRoot -Force | Out-Null
@@ -51,6 +59,7 @@ Get-ChildItem -LiteralPath $packageRoot -File -Recurse | Sort-Object FullName | 
     source_dirty = $dirty
     rustc = (& rustc -V).Trim()
     cargo = (& cargo -V).Trim()
+    features = @()
     cargo_lock_sha256 = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'Cargo.lock') -Algorithm SHA256).Hash.ToLowerInvariant()
     powershell_version = $source.version
     conpty_version = (Get-Content -LiteralPath (Join-Path $projectRoot 'shells/conpty-source.json') -Raw | ConvertFrom-Json).version

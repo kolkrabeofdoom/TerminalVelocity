@@ -351,7 +351,7 @@ Der Ablauf prüft Formatierung, `clippy` ohne Warnungen (`-D warnings`), die Hau
 
 Der [Windows-Workflow](.github/workflows/windows.yml) führt denselben Ablauf bei Pushes auf `main`, bei Pull Requests und auf manuellen Aufruf aus. Die Suite umfasst derzeit **121 Tests** plus die vier PTY-Prüfungen; deren Berichte erscheinen im CI-Log.
 
-Weitere Diagnosemodi der EXE sind `--smoke-test`, `--directory-test`, `--restart-test`, `--profile-test` und `--search-test`. Sie erzeugen Berichte neben der EXE. Für `--handoff-test` zuvor mit `--features test-tools` bauen und die erzeugte `prompt-probe.exe` neben die Terminal-EXE legen. Dieser Test verwendet ein lokales Probeprogramm statt einer KI-Anfrage.
+Die Diagnosemodi `--smoke-test`, `--directory-test`, `--restart-test`, `--profile-test`, `--search-test` und `--handoff-test` sind nur in Builds mit dem Feature `test-tools` enthalten: `cargo build --release --locked --features test-tools`. Sie erzeugen Berichte neben der EXE. Die ausgelieferte EXE enthält sie nicht und beendet sich bei einem solchen Argument mit Exit-Code 2; `scripts/package.ps1` prüft das vor dem Packen. Für `--handoff-test` zusätzlich die mitgebaute `prompt-probe.exe` neben die Terminal-EXE legen; dieser Test verwendet ein lokales Probeprogramm statt einer KI-Anfrage.
 
 ### Portables Paket
 
