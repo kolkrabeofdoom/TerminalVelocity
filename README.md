@@ -4,7 +4,7 @@
 
 TerminalVelocity ist ein Windows-Terminal mit Tabs, geteilten Ansichten, SSH- und WinRM-Verbindungen, einem lokalen Texteditor und Bildanzeige. Vorhandene KI-Kommandozeilenprogramme lassen sich als eigene Sitzungen starten; markierte Terminalausgaben können nach Prüfung an sie übergeben werden.
 
-**Version 1.0.1 „SecureAllConnections-Fix“ · Windows x64 · MIT-Lizenz**
+**Version 1.1.0 „Nigge Tied“ · Windows x64 · MIT-Lizenz**
 
 [Download und Release Notes](https://github.com/kolkrabeofdoom/TerminalVelocity/releases/latest) · [Änderungsverlauf](CHANGELOG.md) · [Prüfbericht](VERIFICATION.md) · [GitHub-Repository](https://github.com/kolkrabeofdoom/TerminalVelocity)
 
@@ -365,7 +365,7 @@ Die Diagnosemodi `--smoke-test`, `--directory-test`, `--restart-test`, `--profil
 ./scripts/package.ps1
 ```
 
-Das Skript führt Tests und Build aus, ergänzt die festgeschriebenen PowerShell- und ConPTY-Dateien und erstellt `dist/TerminalVelocity-1.0.1-Windows-x64.zip` sowie eine `.sha256`-Datei. Downloadquellen und Prüfsummen stehen in [powershell-source.json](shells/powershell-source.json) und [conpty-source.json](shells/conpty-source.json).
+Das Skript führt Tests und Build aus, ergänzt die festgeschriebenen PowerShell- und ConPTY-Dateien und erstellt `dist/TerminalVelocity-1.1.0-Windows-x64.zip` sowie eine `.sha256`-Datei. Downloadquellen und Prüfsummen stehen in [powershell-source.json](shells/powershell-source.json) und [conpty-source.json](shells/conpty-source.json).
 
 Mit `-OutputDirectory <neuer Ordner>` wird ein anderes Ziel verwendet; bestehende Paketordner werden nicht überschrieben. `-SkipBuild` ist nur für einen bereits zum aktuellen Quellstand passenden Release-Build gedacht. KI-CLIs, persönliche Einstellungen und Zugangsdaten werden nicht eingepackt.
 
@@ -376,7 +376,7 @@ Veröffentlicht wird über den [Release-Workflow](.github/workflows/release.yml)
 Die ZIP-Prüfsumme lässt sich mit PowerShell ermitteln und mit der veröffentlichten `.sha256`-Datei vergleichen:
 
 ```powershell
-Get-FileHash .\TerminalVelocity-1.0.1-Windows-x64.zip -Algorithm SHA256
+Get-FileHash .\TerminalVelocity-1.1.0-Windows-x64.zip -Algorithm SHA256
 ```
 
 ## Technik und Lizenzen
