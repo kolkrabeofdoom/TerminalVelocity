@@ -18,6 +18,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Offline tests failed' }
     & cargo test --locked -p vte --lib
     if ($LASTEXITCODE -ne 0) { throw 'Parser regression tests failed' }
+    & cargo test --locked -p egui_term --lib
+    if ($LASTEXITCODE -ne 0) { throw 'egui_term tests failed' }
     # PTY test modes exist only with the test-tools feature.
     & (Join-Path $PSScriptRoot 'build.ps1') -SkipTests -Features test-tools
 

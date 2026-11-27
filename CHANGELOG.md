@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **Strg+U löscht wieder die Eingabezeile**: Die Tastenkombination schickte ein `Q` statt des Steuerzeichens `0x15`. In Git Bash und anderen Readline-Shells erschien dadurch ein Q.
+- Abhängigkeiten: `url` 2.5.9 (RUSTSEC-2026-0592), `clipboard-win` 5.4.3 (5.4.1 zurückgezogen).
 - **Consolas auch ohne `C:`**: Die Terminalschrift wird aus `%SystemRoot%\Fonts` geladen statt fest aus `C:\Windows\Fonts`. Liegt Windows auf einem anderen Laufwerk, fiel TerminalVelocity bisher still auf die eingebaute Schrift zurück.
 - **Kein Hängen bei getrennten Netzlaufwerken**: Meldet eine Shell einen Ordner auf einem eingehängten Netzlaufwerk, prüft TerminalVelocity dessen Existenz nicht mehr im Fenster-Thread; geprüft wird beim Start einer Sitzung dort. Meldungen ohne Ordnerwechsel greifen gar nicht mehr aufs Dateisystem zu.
 - Intern: Testmodi nur noch mit Feature `test-tools`, `main.rs` in Module zerlegt, `clippy` in der CI.
